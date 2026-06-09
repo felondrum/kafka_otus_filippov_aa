@@ -111,4 +111,4 @@ docker exec -it kafka-new /bin/bash
   --bootstrap-server localhost:9093
 ```
 
-![Shell в контейнере kafka-new](screenshots/kafka-kraft-container.png)
+![Shell в контейнере kafka-new](screenshots/kafka-kraft-create-topic-then-chat.png)
