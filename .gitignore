@@ -1,0 +1,88 @@
+# IDEA / GigaIDE
+.idea/
+*.iml
+*.ipr
+*.iws
+*.jar
+*.war
+*.ear
+out/
+target/
+classes/
+.mypy_cache/
+.pytest_cache/
+*.pyc
+__pycache__/
+
+# Java / Scala
+*.class
+*.log
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+*.suo
+*.user
+*.orig
+*.bak
+*.swp
+*~.nib
+local.properties
+
+# Maven / Gradle
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/
+gradle-wrapper.properties
+.gradle/
+*.gradle
+
+# Docker
+.dockerignore
+
+# Python
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+*.egg-info/
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Scala
+*.log
+*.cache
+*.tasty
+*.class
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/.gigaide/
+/.gigacode/
