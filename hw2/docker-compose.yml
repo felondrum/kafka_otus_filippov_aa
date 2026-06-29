@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  kafka-new:
+    image: apache/kafka:4.0.0
+    container_name: kafka-new
+    environment:
+      # Основные настройки
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9094
+
+      # Сетевые настройки
+      KAFKA_LISTENERS: SASL_PLAINTEXT://0.0.0.0:9093,CONTROLLER://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: SASL_PLAINTEXT://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,SASL_PLAINTEXT:SASL_PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: SASL_PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      # SASL настройки
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+
+      # Авторизация
+      KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "true"
+      KAFKA_SUPER_USERS: User:kafka_broker
+
+      # Хранилище
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+
+      # Настройки топиков
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      # JAAS конфигурация
+      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/otus-kafka_server_jaas.conf
+
+      # ID кластера
+      CLUSTER_ID: Mk3OEYBSD34fcwNTJENDM2Qk
+    volumes:
+      - ./otus-kafka_server_jaas.conf:/etc/kafka/otus-kafka_server_jaas.conf:ro
+    ports:
+      - "9093:9093"
