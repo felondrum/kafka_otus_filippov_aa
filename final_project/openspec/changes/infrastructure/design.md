@@ -50,19 +50,28 @@
 - Совместимость с Confluent образов
 - Архитектура уже определена в `ARCHITECTURE/01-overview.md`
 
-### Decision 3: SASL/PLAIN для локальной разработки
+### Decision 3: SASL/PLAIN для EXTERNAL listener
 
-**Выбор:** SASL/PLAIN аутентификация для Kafka.
+**Выбор:** SASL/PLAIN аутентификация на EXTERNAL listener (port 9093), PLAINTEXT на INTERNAL (broker-to-broker, port 9092).
 
 **Альтернативы:**
-- PLAINTEXT — нет аутентификации, небезопасно
+- PLAINTEXT на всех listeners — нет аутентификации, небезопасно
 - mTLS — сложно настроить локально, требует CA
+- SASL/PLAIN на всех listeners — сложно с credentials для Schema Registry/Connect
 
 **Обоснование:**
 - Архитектура требует безопасности (см. `ARCHITECTURE/07-security.md`)
-- SASL/PLAIN достаточно для локальной разработки
-- Единый подход для local и production (разные credentials)
+- EXTERNAL listener: SASL/PLAIN для клиентов (port 9093)
+- INTERNAL listener: PLAINTEXT для broker-to-broker (port 9092) — упрощение для local dev
+- Единый JAAS config для всех сервисов (Schema Registry, Connect)
 - ACL для разделения прав сервисов
+- Schema Registry и Kafka Connect подключаются к Kafka через INTERNAL с SASL credentials
+
+**Реализация:**
+- JAAS config: `/etc/kafka/jaas.conf` (монтируется в каждый брокер)
+- `KAFKA_SASL_ENABLED_MECHANISMS: PLAIN`
+- `KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/jaas.conf`
+- Kafdrop настроен на подключение к INTERNAL listener без SASL (`security.protocol=PLAINTEXT`)
 
 ### Decision 4: ARM64 образы для Apple Silicon
 
@@ -88,15 +97,22 @@
 - `load-test` — для нагрузочного тестирования инфраструктуры (Kafka + PostgreSQL + monitoring)
 - `full` — полный стек для разработки
 
-### Decision 6: 8 топиков с replication=3, partitions=6
+### Decision 6: 10 топиков с replication=3, partitions=6
 
-**Выбор:** Все 8 топиков с репликацией 3 и 6 партициями.
+**Выбор:** Все 10 топиков с репликацией 3 и 6 партициями (DLQ темы — 3 партиции).
 
 **Обоснование:**
 - Репликация 3 — отказоустойчивость (выдерживает потерю 1 брокера)
 - 6 партиций — параллелизм для consumer groups до 6 экземпляров
 - Единая конфигурация упрощает управление
 - Соответствует требованиям архитектуры (`ARCHITECTURE/04-data-flow.md`)
+- DLQ темы имеют 3 партиции (меньшая нагрузка, т.к. редкие сообщения)
+
+**Темы:**
+- Stream topics (Avro): `calls.completed`, `calls.fraud-alerts`, `transcription.raw`, `transcription.summary`, `transcription.enriched`, `calls.dlq`
+- Compacted topics (Avro, cleanup.policy=compact): `calls.metadata`, `customers.profile`
+- ksqlDB output (Avro): `calls.completed.agg`, `calls.fraud-alerts.agg`
+- DLQ (JSON): `transcription.enriched.dlq` (partitions=3)
 
 ## Risks / Trade-offs
 

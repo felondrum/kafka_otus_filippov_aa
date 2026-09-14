@@ -1,0 +1,49 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['prometheus:9090']
+
+  # Kafka brokers with JMX Exporter (port 5556)
+  - job_name: 'kafka'
+    static_configs:
+      - targets:
+          - 'kafka-1:5556'
+          - 'kafka-2:5556'
+          - 'kafka-3:5556'
+
+  # PostgreSQL exporters
+  - job_name: 'postgresql'
+    static_configs:
+      - targets:
+          - 'postgres-exporter:9187'
+
+  # Infrastructure services
+  - job_name: 'infrastructure'
+    static_configs:
+      - targets: ['grafana:3000', 'kafdrop:9000', 'kafka-connect:8083']
+
+  # Schema Registry
+  - job_name: 'schema-registry'
+    static_configs:
+      - targets: ['schema-registry:8085']
+
+  # Microservice targets (placeholder for future services)
+  # - job_name: 'call-processor'
+  #   metrics_path: '/actuator/prometheus'
+  #   static_configs:
+  #     - targets: ['call-processor:8080']
+  #
+  # - job_name: 'fraud-detector'
+  #   metrics_path: '/actuator/prometheus'
+  #   static_configs:
+  #     - targets: ['fraud-detector:8081']
+  #
+  # - job_name: 'transcription-analyzer'
+  #   metrics_path: '/actuator/prometheus'
+  #   static_configs:
+  #     - targets: ['transcription-analyzer:8083']
