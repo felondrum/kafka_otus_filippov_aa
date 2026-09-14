@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "CallEvent",
+  "namespace": "com.example.callprocessor.avro",
+  "fields": [
+    {"name": "callId", "type": "string"},
+    {"name": "phone", "type": "string"},
+    {"name": "duration", "type": ["null", "int"], "default": null},
+    {"name": "agentId", "type": ["null", "string"], "default": null},
+    {"name": "npsScore", "type": ["null", "int"], "default": null},
+    {"name": "status", "type": ["null", "string"], "default": null},
+    {"name": "timestamp", "type": ["null", "string"], "default": null}
+  ]
+}

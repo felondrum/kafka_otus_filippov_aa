@@ -1,0 +1,19 @@
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      properties:
+        schema.registry.url: http://localhost:8085
+  main:
+    allow-bean-definition-overriding: true
+
+call-processor:
+  retry:
+    max-attempts: 3
+    backoff-delay: 100
+
+logging:
+  level:
+    com.example.callprocessor: DEBUG
+    org.apache.kafka: WARN
+    org.springframework.kafka: DEBUG

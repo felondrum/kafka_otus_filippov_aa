@@ -1,0 +1,11 @@
+{
+  "status": "UP",
+  "components": {
+    "kafka": {
+      "status": "UP",
+      "details": {
+        "bootstrapServers": "configured"
+      }
+    }
+  }
+}

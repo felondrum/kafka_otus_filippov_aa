@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "DlqEvent",
+  "namespace": "com.example.callprocessor.avro",
+  "fields": [
+    {"name": "originalPayload", "type": "string"},
+    {"name": "errorMessage", "type": "string"},
+    {"name": "timestamp", "type": "string"},
+    {"name": "correlationId", "type": "string"},
+    {"name": "callId", "type": "string"},
+    {"name": "attemptCount", "type": "int"}
+  ]
+}
