@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "FraudAlert",
+  "namespace": "com.example.frauddetector.avro",
+  "fields": [
+    {"name": "callId", "type": "string"},
+    {"name": "phone", "type": "string"},
+    {"name": "pattern", "type": {"type": "enum", "name": "FraudPattern", "symbols": ["FREQUENT_CALLS", "NPS_ESCALATION", "ANOMALOUS_DURATION"]}},
+    {"name": "count", "type": "int"},
+    {"name": "timestamp", "type": "string"},
+    {"name": "severity", "type": {"type": "enum", "name": "AlertSeverity", "symbols": ["HIGH", "MEDIUM", "LOW"]}}
+  ]
+}

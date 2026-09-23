@@ -1,0 +1,10 @@
+{
+  "namespace": "com.example.transcription.avro",
+  "type": "record",
+  "name": "CallMetadata",
+  "fields": [
+    {"name": "callId", "type": "string"},
+    {"name": "status", "type": "string"},
+    {"name": "timestamp", "type": "long"}
+  ]
+}
