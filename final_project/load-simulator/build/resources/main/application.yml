@@ -1,0 +1,24 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: load-simulator
+
+  jackson:
+    default-property-inclusion: non_null
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+call-processor:
+  url: ${CALL_PROCESSOR_URL:http://localhost:8081}
+
+logging:
+  level:
+    com.example.loadsimulator: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

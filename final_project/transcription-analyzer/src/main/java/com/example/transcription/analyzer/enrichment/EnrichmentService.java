@@ -1,12 +1,11 @@
 package com.example.transcription.analyzer.enrichment;
 
-import com.example.transcription.analyzer.enrichment.CustomerProfileManager;
-import com.example.transcription.avro.CustomerProfile;
-import com.example.transcription.avro.EnrichedTranscription;
-import com.example.transcription.avro.TranscriptionSummary;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.util.Map;
 
 @Component
 public class EnrichmentService {
@@ -23,15 +22,15 @@ public class EnrichmentService {
      * Enrich transcription summary with customer profile data.
      * Uses broadcast enrichment: lookup customer by phone derived from callId.
      */
-    public EnrichedTranscription enrich(TranscriptionSummary summary, String transcriptionText, String phone) {
-        CustomerProfile profile = customerProfileManager.lookup(phone);
+    public Map<String, Object> enrich(Map<String, Object> summary, String transcriptionText, String phone) {
+        Map<String, String> profile = customerProfileManager.lookup(phone);
 
         String segment;
         String riskLevel;
 
         if (profile != null) {
-            segment = profile.getSegment().toString();
-            riskLevel = profile.getRiskLevel().toString();
+            segment = profile.getOrDefault("segment", "STANDARD");
+            riskLevel = profile.getOrDefault("riskLevel", "LOW");
         } else {
             // Default values for missing customer profile
             segment = "STANDARD";
@@ -41,21 +40,21 @@ public class EnrichmentService {
 
         String priority = calculatePriority(segment, riskLevel);
 
-        EnrichedTranscription enriched = new EnrichedTranscription(
-                summary.getCallId(),
-                transcriptionText,
-                summary.getSentiment(),
-                summary.getUrgency(),
-                summary.getProblem(),
-                summary.getSolution(),
-                summary.getConfidence(),
-                segment,
-                riskLevel,
-                priority
-        );
+        // Use LinkedHashMap to preserve field order and ensure all fields are set
+        Map<String, Object> enriched = new java.util.LinkedHashMap<>();
+        enriched.put("callId", summary.get("callId"));
+        enriched.put("transcriptionText", transcriptionText);
+        enriched.put("sentiment", summary.get("sentiment"));
+        enriched.put("urgency", summary.get("urgency"));
+        enriched.put("problem", summary.get("problem"));
+        enriched.put("solution", summary.get("solution"));
+        enriched.put("confidence", summary.get("confidence"));
+        enriched.put("segment", segment);
+        enriched.put("riskLevel", riskLevel);
+        enriched.put("priority", priority);
 
         log.debug("Enriched transcription: callId={}, segment={}, riskLevel={}, priority={}",
-                summary.getCallId(), segment, riskLevel, priority);
+                summary.get("callId"), segment, riskLevel, priority);
 
         return enriched;
     }

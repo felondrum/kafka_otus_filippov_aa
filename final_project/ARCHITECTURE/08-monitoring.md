@@ -308,7 +308,7 @@ scrape_configs:
   "message": "Failed to process message, sending to DLQ",
   "correlationId": "xyz-789-ghi-012",
   "callId": "660e8400-e29b-41d4-a716-446655440001",
-  "exception": "org.apache.kafka.common.errors.SerializationException: Error deserializing Avro message",
+  "exception": "org.apache.kafka.common.errors.SerializationException: Error deserializing JSON message",
   "serviceName": "transcription-analyzer",
   "containerId": "c3d4e5f6a1b2",
   "thread": "kafka-consumer-transcription-analyzer-1"

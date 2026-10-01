@@ -24,7 +24,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 24,
+        "w": 6,
         "x": 0,
         "y": 0
       },
@@ -35,9 +35,7 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -46,7 +44,51 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "count(kafka_server_replicamanager_partitioncount)",
+          "expr": "count(kafka_topic_partitions)",
+          "legendFormat": "Total Topics",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Topics",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.0",
+      "targets": [
+        {
+          "expr": "sum(kafka_topic_partitions)",
           "legendFormat": "Total Partitions",
           "refId": "A"
         }
@@ -70,55 +112,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 8,
-        "x": 0,
-        "y": 4
-      },
-      "id": 2,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.2.0",
-      "targets": [
-        {
-          "expr": "count(kafka_server_replicamanager_isrshrinkagerate)",
-          "legendFormat": "Brokers",
-          "refId": "A"
-        }
-      ],
-      "title": "Active Brokers",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
-        "y": 4
+        "w": 6,
+        "x": 12,
+        "y": 0
       },
       "id": 3,
       "options": {
@@ -127,9 +123,7 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -138,12 +132,12 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sum(kafka_server_replicamanager_underreplicatedpartitions)",
-          "legendFormat": "Under-replicated",
+          "expr": "sum(kafka_consumergroup_current_offset)",
+          "legendFormat": "Total Consumer Groups",
           "refId": "A"
         }
       ],
-      "title": "Under-replicated Partitions",
+      "title": "Consumer Groups",
       "type": "stat"
     },
     {
@@ -162,9 +156,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 4
+        "w": 6,
+        "x": 18,
+        "y": 0
       },
       "id": 4,
       "options": {
@@ -173,9 +167,7 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -184,12 +176,12 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sum(kafka_server_brokertopicmetrics_messagesinpersec)",
-          "legendFormat": "Messages/sec",
+          "expr": "sum(kafka_consumergroup_lag)",
+          "legendFormat": "Total Lag",
           "refId": "A"
         }
       ],
-      "title": "Messages In (per sec)",
+      "title": "Total Consumer Lag",
       "type": "stat"
     },
     {
@@ -202,11 +194,11 @@
           "color": {
             "mode": "palette-classic"
           },
-          "unit": "Bps",
           "custom": {
             "fillOpacity": 20,
             "lineWidth": 2
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -214,7 +206,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 4
       },
       "id": 5,
       "options": {
@@ -230,17 +222,12 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sum by(instance) (rate(kafka_server_brokertopicmetrics_bytesinpersec[5m]))",
-          "legendFormat": "{{instance}} In",
+          "expr": "kafka_topic_partitions",
+          "legendFormat": "{{topic}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum by(instance) (rate(kafka_server_brokertopicmetrics_bytesoutpersec[5m]))",
-          "legendFormat": "{{instance}} Out",
-          "refId": "B"
         }
       ],
-      "title": "Network Throughput",
+      "title": "Partitions per Topic",
       "type": "timeseries"
     },
     {
@@ -253,11 +240,11 @@
           "color": {
             "mode": "palette-classic"
           },
-          "unit": "short",
           "custom": {
             "fillOpacity": 20,
             "lineWidth": 2
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -265,7 +252,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 4
       },
       "id": 6,
       "options": {
@@ -281,12 +268,12 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sum by(instance) (rate(kafka_server_brokertopicmetrics_messagesinpersec[5m]))",
-          "legendFormat": "{{instance}} Messages/sec",
+          "expr": "kafka_consumergroup_lag",
+          "legendFormat": "{{consumergroup}}-{{topic}}-{{partition}}",
           "refId": "A"
         }
       ],
-      "title": "Messages In/Out Rate",
+      "title": "Consumer Lag (by group/topic/partition)",
       "type": "timeseries"
     },
     {
@@ -299,11 +286,11 @@
           "color": {
             "mode": "palette-classic"
           },
-          "unit": "short",
           "custom": {
             "fillOpacity": 20,
             "lineWidth": 2
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -311,7 +298,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 12
       },
       "id": 7,
       "options": {
@@ -327,17 +314,12 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "kafka_server_replicamanager_partitioncount",
-          "legendFormat": "{{instance}} Partitions",
+          "expr": "kafka_topic_partition_current_offset",
+          "legendFormat": "{{topic}}-{{partition}}",
           "refId": "A"
-        },
-        {
-          "expr": "kafka_server_replicamanager_leadercount",
-          "legendFormat": "{{instance}} Leaders",
-          "refId": "B"
         }
       ],
-      "title": "Partitions & Leaders",
+      "title": "Partition Offsets (top topics)",
       "type": "timeseries"
     },
     {
@@ -350,11 +332,11 @@
           "color": {
             "mode": "palette-classic"
           },
-          "unit": "ms",
           "custom": {
             "fillOpacity": 20,
             "lineWidth": 2
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -362,7 +344,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 12
       },
       "id": 8,
       "options": {
@@ -378,34 +360,148 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "kafka_network_requestmetrics_totaltimems_avg{request=\"Produce\"}",
-          "legendFormat": "{{instance}} Produce",
+          "expr": "kafka_consumergroup_current_offset",
+          "legendFormat": "{{consumergroup}}-{{topic}}-{{partition}}",
           "refId": "A"
-        },
-        {
-          "expr": "kafka_network_requestmetrics_totaltimems_avg{request=\"FetchConsumer\"}",
-          "legendFormat": "{{instance}} Fetch Consumer",
-          "refId": "B"
         }
       ],
-      "title": "Request Latency (avg ms)",
+      "title": "Consumer Group Offsets",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 2
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.2.0",
+      "targets": [
+        {
+          "expr": "kafka_consumergroup_lag",
+          "legendFormat": "{{consumergroup}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Lag per Consumer Group",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 2
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.2.0",
+      "targets": [
+        {
+          "expr": "kafka_consumergroup_members",
+          "legendFormat": "{{consumergroup}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Consumer Group Members",
       "type": "timeseries"
     }
   ],
   "schemaVersion": 38,
   "tags": [
     "kafka",
-    "infrastructure"
+    "topics",
+    "partitions",
+    "consumer-lag"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "definition": "label_values(kafka_topic_partitions, topic)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "topic",
+        "options": [],
+        "query": "label_values(kafka_topic_partitions, topic)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
-  "title": "Kafka Cluster Overview",
-  "uid": "kafka-overview",
-  "version": 1
+  "title": "Kafka Topics & Partitions",
+  "uid": "kafka-topics-partitions",
+  "version": 4
 }

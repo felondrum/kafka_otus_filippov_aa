@@ -151,7 +151,7 @@
 │  │              Output                                      │ │
 │  │                                                          │ │
 │  │  ┌──────────────────────────────────────────────┐       │ │
-│  │  │  calls.fraud-alerts (key=phone, Avro)        │       │ │
+│  │  │  calls.fraud-alerts (key=phone, JSON)        │       │ │
 │  │  └──────────────────────────────────────────────┘       │ │
 │  └─────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────┘
@@ -169,7 +169,7 @@
 | **Anomalous Duration Detector** | Детекция длительных звонков (> 300 сек) |
 | **Processor API** | Детекция эскалации (3x негативный NPS за день) |
 | **State Store (RocksDB)** | Хранение счётчиков с per-phone TTL 24 часа |
-| **Output** | Запись алертов в `calls.fraud-alerts` (Avro via Schema Registry) |
+| **Output** | Запись алертов в `calls.fraud-alerts` (JSON via Schema Registry) |
 
 **Streams Configuration:**
 
@@ -211,7 +211,7 @@ Spring Boot Actuator: GET /actuator/health
 │  │                           ▼                             │ │
 │  │              ┌────────────────────────┐                  │ │
 │  │              │  transcription.raw     │                  │ │
-│  │              │  (key=callId, Avro)    │                  │ │
+│  │              │  (key=callId, JSON)    │                  │ │
 │  │              └────────────────────────┘                  │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                              │                                │

@@ -1,18 +1,8 @@
-FROM eclipse-temurin:21-alpine AS build
-WORKDIR /app
-COPY build.gradle.kts settings.gradle.kts ./
-COPY gradle/wrapper/gradle-wrapper.jar ./gradle/wrapper/gradle-wrapper.jar
-COPY gradle/wrapper/gradle-wrapper.properties ./gradle/wrapper/gradle-wrapper.properties
-COPY src src
-COPY gradlew ./gradlew
-RUN chmod +x ./gradlew
-RUN ./gradlew bootJar --no-daemon
-
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-COPY --from=build /app/build/libs/*.jar app.jar
+COPY build/libs/*.jar app.jar
 
 USER appuser
 

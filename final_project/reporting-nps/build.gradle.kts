@@ -15,20 +15,6 @@ java {
 
 repositories {
     mavenCentral()
-    maven { url = uri("https://packages.confluent.io/maven/") }
-}
-
-val avroVersion = "1.12.0"
-
-configurations {
-    compileClassPath {
-        resolutionStrategy.eachDependency {
-            if (requested.group == "org.apache.avro" && requested.name.startsWith("avro")) {
-                useVersion(avroVersion)
-                because("Force consistent Avro version")
-            }
-        }
-    }
 }
 
 dependencies {
@@ -40,11 +26,6 @@ dependencies {
 
     // Kafka
     implementation("org.springframework.kafka:spring-kafka")
-
-    // Schema Registry & Avro
-    implementation("io.confluent:kafka-schema-registry-client:7.6.1")
-    implementation("io.confluent:kafka-avro-serializer:7.6.1")
-    implementation("org.apache.avro:avro:1.12.0")
 
     // PostgreSQL
     implementation("org.postgresql:postgresql:42.7.3")
@@ -79,15 +60,6 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
     systemProperty("spring.profiles.active", "test")
-    finalizedBy(tasks.jacocoTestReport)
-}
-
-tasks.register("jacocoTestReport") {
-    dependsOn(tasks.test, tasks.jacocoTestReportExecution)
-    doLast {
-        val report = tasks.named("jacocoTestReport").get()
-        println("JaCoCo report generated at: ${report.extensions.extraProperties.get("reports")?.let { (it as? Map<*>)?.get("xml")?.let { xml -> (xml as? Map<*>)?.get("location") } } ?: "check tasks.jacocoTestReport output"}")
-    }
 }
 
 tasks.withType<JavaCompile> {
@@ -100,12 +72,4 @@ tasks.bootBuildImage {
 
 jacoco {
     toolVersion = "0.8.11"
-}
-
-jacocoTestReport {
-    dependsOn(tasks.test)
-    reports {
-        xml.required.set(true)
-        html.required.set(true)
-    }
 }

@@ -1,5 +1,8 @@
 package com.example.reportingnps.consumer;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.reportingnps.entity.CallMetadata;
 import com.example.reportingnps.entity.CallTranscription;
 import com.example.reportingnps.repository.CallMetadataRepository;
@@ -12,8 +15,6 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,9 +28,10 @@ public class EnrichedTranscriptionConsumer {
     private final CallMetadataRepository metadataRepository;
     private final ReportService reportService;
     private final SentimentService sentimentService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Buffer for orphan events (call_id not found in metadata)
-    private final ConcurrentHashMap<UUID, Map<String, Object>> orphanBuffer = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, String> orphanBuffer = new ConcurrentHashMap<>();
 
     public EnrichedTranscriptionConsumer(CallTranscriptionRepository transcriptionRepository,
                                          CallMetadataRepository metadataRepository,
@@ -43,20 +45,44 @@ public class EnrichedTranscriptionConsumer {
 
     @KafkaListener(topics = "transcription.enriched", groupId = "reporting-nps",
             containerFactory = "kafkaListenerContainerFactory")
-    public void consume(Map<String, Object> event, Acknowledgment ack) {
+    public void consume(String jsonEvent, Acknowledgment ack) {
         try {
-            UUID callId = UUID.fromString(event.get("callId").toString());
+            JsonNode node = objectMapper.readTree(jsonEvent);
+
+            // Handle Confluent JSON format: {"schema": ..., "payload": ...}
+            // If payload exists, extract it; otherwise use node as-is (plain JSON)
+            if (node.has("payload")) {
+                node = node.get("payload");
+            }
+
+            String callIdStr = node.has("callId") ? node.get("callId").asText() : null;
+            
+            if (callIdStr == null || callIdStr.isEmpty()) {
+                log.warn("Received enriched transcription without callId, skipping");
+                ack.acknowledge();
+                return;
+            }
+            
+            // Parse callId as UUID
+            UUID callId;
+            try {
+                callId = UUID.fromString(callIdStr);
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid UUID format for callId: {}, skipping enriched transcription", callIdStr);
+                ack.acknowledge();
+                return;
+            }
 
             // Check FK integrity - call must exist in metadata
             Optional<CallMetadata> existingMetadata = metadataRepository.findByCallId(callId);
             if (existingMetadata.isEmpty()) {
                 // Buffer orphan event for retry
-                bufferOrphanEvent(callId, event);
+                bufferOrphanEvent(callId, jsonEvent);
                 ack.acknowledge(); // Ack but don't process yet
                 return;
             }
 
-            CallTranscription transcription = convertToTranscription(event);
+            CallTranscription transcription = convertToTranscription(node);
             transcription.setCallId(callId);
 
             // Upsert: update existing or create new
@@ -70,74 +96,62 @@ public class EnrichedTranscriptionConsumer {
 
             // Also update metadata with segment, riskLevel, priority if present
             CallMetadata metadata = existingMetadata.get();
-            if (event.containsKey("segment")) {
-                metadata.setSegment(event.get("segment").toString());
+            if (node.has("segment")) {
+                metadata.setSegment(node.get("segment").asText());
             }
-            if (event.containsKey("riskLevel")) {
-                metadata.setRiskLevel(event.get("riskLevel").toString());
+            if (node.has("riskLevel")) {
+                metadata.setRiskLevel(node.get("riskLevel").asText());
             }
-            if (event.containsKey("priority")) {
-                metadata.setPriority(event.get("priority").toString());
+            if (node.has("priority")) {
+                metadata.setPriority(node.get("priority").asText());
             }
             metadataRepository.save(metadata);
 
             // Invalidate caches
-            reportService.evictMetadataCache(callId.toString());
+            reportService.evictMetadataCache(callIdStr);
             reportService.evictReportCache();
             sentimentService.evictSentimentCache();
 
             ack.acknowledge();
+        } catch (JsonProcessingException e) {
+            log.error("Failed to process enriched transcription event: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
         } catch (Exception e) {
             log.error("Failed to process enriched transcription event: {}", e.getMessage(), e);
             throw e;
         }
     }
 
-    private void bufferOrphanEvent(UUID callId, Map<String, Object> event) {
-        orphanBuffer.computeIfAbsent(callId, k -> event);
+    private void bufferOrphanEvent(UUID callId, String jsonEvent) {
+        orphanBuffer.computeIfAbsent(callId, k -> jsonEvent);
         log.warn("Buffered orphan event for callId: {}. Total buffered: {}", callId, orphanBuffer.size());
         // In production, would implement retry logic with scheduled task
         // For MVP, we log and move on
     }
 
-    private CallTranscription convertToTranscription(Map<String, Object> event) {
+    private CallTranscription convertToTranscription(JsonNode node) {
         CallTranscription transcription = new CallTranscription();
 
-        if (event.containsKey("callId")) {
-            transcription.setCallId(UUID.fromString(event.get("callId").toString()));
+        if (node.has("transcriptionText")) {
+            transcription.setTranscriptionText(node.get("transcriptionText").asText());
         }
-        if (event.containsKey("transcriptionText")) {
-            transcription.setTranscriptionText(event.get("transcriptionText").toString());
+        if (node.has("language")) {
+            transcription.setLanguage(node.get("language").asText());
         }
-        if (event.containsKey("language")) {
-            transcription.setLanguage(event.get("language").toString());
+        if (node.has("confidence")) {
+            transcription.setConfidenceScore(node.get("confidence").asDouble());
         }
-        if (event.containsKey("confidenceScore")) {
-            transcription.setConfidenceScore(Double.parseDouble(event.get("confidenceScore").toString()));
+        if (node.has("problem")) {
+            transcription.setProblem(node.get("problem").asText());
         }
-        if (event.containsKey("problem")) {
-            transcription.setProblem(event.get("problem").toString());
+        if (node.has("solution")) {
+            transcription.setSolution(node.get("solution").asText());
         }
-        if (event.containsKey("solution")) {
-            transcription.setSolution(event.get("solution").toString());
+        if (node.has("sentiment")) {
+            transcription.setSentiment(node.get("sentiment").asText());
         }
-        if (event.containsKey("sentiment")) {
-            transcription.setSentiment(event.get("sentiment").toString());
-        }
-        if (event.containsKey("urgency")) {
-            transcription.setUrgency(event.get("urgency").toString());
-        }
-        if (event.containsKey("confidence")) {
-            transcription.setConfidence(Double.parseDouble(event.get("confidence").toString()));
-        }
-        if (event.containsKey("segment")) {
-            transcription.setSegment(event.get("segment").toString());
-        }
-        if (event.containsKey("riskLevel")) {
-            transcription.setRiskLevel(event.get("riskLevel").toString());
-        }
-        if (event.containsKey("priority")) {
-            transcription.setPriority(event.get("priority").toString());
+        if (node.has("urgency")) {
+            transcription.setUrgency(node.get("urgency").asText());
         }
 
         return transcription;

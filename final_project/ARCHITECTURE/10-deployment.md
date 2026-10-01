@@ -162,7 +162,7 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-1:9092,kafka-2:9092,kafka-3:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
       properties:
         schema.registry.url: ${SCHEMA_REGISTRY_URL:http://schema-registry:8081}
         sasl.mechanism: PLAIN
@@ -170,7 +170,7 @@ spring:
         security.protocol: SASL_PLAINTEXT
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       properties:
         schema.registry.url: ${SCHEMA_REGISTRY_URL:http://schema-registry:8081}
         sasl.mechanism: PLAIN

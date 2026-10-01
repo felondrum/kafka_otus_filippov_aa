@@ -1,17 +1,24 @@
 package com.example.frauddetector.processor;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.example.frauddetector.config.FraudDetectorProperties;
-import com.example.frauddetector.avro.FraudAlert;
+import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KeyValue;
+import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.KeyValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 
 /**
  * Detects calls with abnormally long duration (> 300 seconds).
+ * Produces FraudAlert with severity=LOW.
+ * Uses JSON (String) serialization.
  */
 @Component
 public class AnomalousDurationProcessor {
@@ -20,99 +27,56 @@ public class AnomalousDurationProcessor {
 
     private final FraudDetectorProperties properties;
     private final PhoneNormalizer phoneNormalizer;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public AnomalousDurationProcessor(FraudDetectorProperties properties, PhoneNormalizer phoneNormalizer) {
+    @Autowired
+    public AnomalousDurationProcessor(
+            FraudDetectorProperties properties,
+            PhoneNormalizer phoneNormalizer) {
         this.properties = properties;
         this.phoneNormalizer = phoneNormalizer;
     }
 
-    /**
-     * Detect calls with duration > max-duration-seconds.
-     */
-    public KStream<String, FraudAlert> detect(KStream<String, String> callStream) {
-        return callStream
-                .mapValues(value -> {
-                    Integer duration = extractDuration(value);
-                    String phone = extractPhone(value);
-                    String callId = extractCallId(value);
-
-                    if (duration == null || phone == null || callId == null) {
-                        return null;
-                    }
-
-                    if (duration > properties.getMaxDurationSeconds()) {
-                        String normalizedPhone = phoneNormalizer.normalize(phone);
-                        FraudAlert alert = new FraudAlert(
-                                "ANOMALOUS_DURATION_" + callId,
-                                normalizedPhone,
-                                FraudAlert.FraudPattern.ANOMALOUS_DURATION,
-                                1,
-                                Instant.now().toString(),
-                                FraudAlert.AlertSeverity.LOW
-                        );
-                        return KeyValue.pair(normalizedPhone, alert);
-                    }
-                    return null;
-                })
-                .filter((key, value) -> value != null);
-    }
-
-    private Integer extractDuration(String callEventJson) {
-        try {
-            int durIndex = callEventJson.indexOf("\"duration\"");
-            if (durIndex == -1) return null;
-            int colonIndex = callEventJson.indexOf(":", durIndex);
-            String afterColon = callEventJson.substring(colonIndex + 1).trim();
-            if (afterColon.startsWith("null") || afterColon.startsWith("\"")) {
-                return null;
+    public void detect(KStream<String, String> callStream, String fraudAlertsTopic) {
+        // Filter calls with duration > max-duration-seconds
+        callStream.filter((key, jsonEvent) -> {
+            try {
+                JsonNode node = objectMapper.readTree(jsonEvent);
+                JsonNode durationNode = node.get("duration");
+                Integer duration = durationNode != null && !durationNode.isNull() ? durationNode.asInt() : null;
+                return duration != null && duration > properties.getMaxDurationSeconds();
+            } catch (Exception e) {
+                log.warn("Failed to parse event: {}", e.getMessage());
+                return false;
             }
-            // Handle JSON number format
-            int start = afterColon.indexOf(':') >= 0 ? afterColon.indexOf(':') + 1 : 0;
-            String numStr = afterColon.substring(start).trim();
-            int end = 0;
-            for (int i = 0; i < numStr.length(); i++) {
-                char c = numStr.charAt(i);
-                if (Character.isDigit(c) || c == '-') {
-                    end = i + 1;
-                } else {
-                    break;
+        })
+        .map((key, jsonEvent) -> {
+            try {
+                JsonNode node = objectMapper.readTree(jsonEvent);
+                String phone = node.has("phone") ? node.get("phone").asText() : null;
+                String callId = node.has("callId") ? node.get("callId").asText() : null;
+                JsonNode durationNode = node.get("duration");
+                Integer duration = durationNode != null && !durationNode.isNull() ? durationNode.asInt() : null;
+
+                if (phone == null || phone.isEmpty() || callId == null || callId.isEmpty()) {
+                    return KeyValue.pair(key, null);
                 }
+
+                String normalizedPhone = phoneNormalizer.normalize(phone);
+                ObjectNode alert = objectMapper.createObjectNode();
+                alert.put("callId", "anom-" + callId + "-" + System.currentTimeMillis());
+                alert.put("phone", normalizedPhone);
+                alert.put("pattern", "ANOMALOUS_DURATION");
+                alert.put("count", 1);
+                alert.put("timestamp", Instant.now().toString());
+                alert.put("severity", "LOW");
+                return KeyValue.pair(normalizedPhone, objectMapper.writeValueAsString(alert));
+            } catch (Exception e) {
+                log.error("Error creating alert: {}", e.getMessage());
+                return KeyValue.pair(key, null);
             }
-            if (end == 0) return null;
-            return Integer.parseInt(numStr.substring(0, end));
-        } catch (Exception e) {
-            log.warn("Failed to extract duration from call event: {}", callEventJson, e);
-            return null;
-        }
-    }
-
-    private String extractPhone(String callEventJson) {
-        try {
-            int phoneIndex = callEventJson.indexOf("\"phone\"");
-            if (phoneIndex == -1) return null;
-            int colonIndex = callEventJson.indexOf(":", phoneIndex);
-            int quoteStart = callEventJson.indexOf("\"", colonIndex + 1);
-            int quoteEnd = callEventJson.indexOf("\"", quoteStart + 1);
-            if (quoteStart == -1 || quoteEnd == -1) return null;
-            return callEventJson.substring(quoteStart + 1, quoteEnd);
-        } catch (Exception e) {
-            log.warn("Failed to extract phone from call event: {}", callEventJson, e);
-            return null;
-        }
-    }
-
-    private String extractCallId(String callEventJson) {
-        try {
-            int idIndex = callEventJson.indexOf("\"callId\"");
-            if (idIndex == -1) return null;
-            int colonIndex = callEventJson.indexOf(":", idIndex);
-            int quoteStart = callEventJson.indexOf("\"", colonIndex + 1);
-            int quoteEnd = callEventJson.indexOf("\"", quoteStart + 1);
-            if (quoteStart == -1 || quoteEnd == -1) return null;
-            return callEventJson.substring(quoteStart + 1, quoteEnd);
-        } catch (Exception e) {
-            log.warn("Failed to extract callId from call event: {}", callEventJson, e);
-            return null;
-        }
+        })
+        .filter((phone, alert) -> alert != null)
+        .to(fraudAlertsTopic, Produced.with(Serdes.String(), Serdes.String()));
     }
 }

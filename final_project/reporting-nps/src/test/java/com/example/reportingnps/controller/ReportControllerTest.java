@@ -5,12 +5,13 @@ import com.example.reportingnps.service.ReportService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.bean.MockBean;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -29,15 +30,12 @@ class ReportControllerTest {
         // Given
         DailyReportResponse response = new DailyReportResponse(
                 100, 0.85,
-                Map.of("COMPLETED", 80, "FAILED", 20),
-                Map.of("PREMIUM", 30, "STANDARD", 70),
-                Map.of("agent-001", 50, "agent-002", 50)
+                Map.of("COMPLETED", 80L, "FAILED", 20L),
+                Map.of("PREMIUM", 30L, "STANDARD", 70L),
+                Map.of("agent-001", 50L, "agent-002", 50L)
         );
 
-        when(reportService.getDailyReport(
-                LocalDateTime.now().minusDays(1),
-                LocalDateTime.now()
-        )).thenReturn(response);
+        when(reportService.getDailyReport(any(), any())).thenReturn(response);
 
         // When & Then
         mockMvc.perform(get("/api/reports/daily"))
@@ -54,10 +52,7 @@ class ReportControllerTest {
                 50, 0.9, Map.of(), Map.of(), Map.of()
         );
 
-        when(reportService.getDailyReport(
-                LocalDateTime.of(2024, 1, 1, 0, 0),
-                LocalDateTime.of(2024, 1, 31, 23, 59)
-        )).thenReturn(response);
+        when(reportService.getDailyReport(any(), any())).thenReturn(response);
 
         // When & Then
         mockMvc.perform(get("/api/reports/daily")

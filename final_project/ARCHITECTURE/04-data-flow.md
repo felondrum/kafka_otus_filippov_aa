@@ -19,7 +19,7 @@ Caller (REST)
 ┌─────────────────────┐                                  ┌─────────────────────┐
 │  calls.completed    │                                  │  calls.metadata     │
 │  (Stream, callId)   │                                  │  (Compacted,       │
-│  Avro               │                                  │   callId)           │
+│  JSON               │                                  │   callId)           │
 └────┬────────────────┘                                  └────────┬────────────┘
      │                                                             │
      │  fraud-detector                                            │  reporting-nps
@@ -28,7 +28,7 @@ Caller (REST)
 ┌─────────────────────┐                                  ┌─────────────────────┐
 │  calls.fraud-alerts │                                  │  PostgreSQL         │
 │  (Stream, phone)    │                                  │  call_metadata      │
-│  Avro               │                                  └─────────────────────┘
+│  JSON               │                                  └─────────────────────┘
 └─────────────────────┘                                           ▲
      │                                                            │
      │  reporting-nps                                             │
@@ -48,7 +48,7 @@ Caller (REST)
                                     ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
                                     │transcription.raw│   │transcription.   │   │customers.profile│
                                     │(Stream, callId) │   │summary          │   │(Compacted, phone) │
-                                    │Avro              │   │(Stream, callId) │   │Avro              │
+                                    │JSON              │   │(Stream, callId) │   │JSON              │
                                     └─────────────────┘   └─────────────────┘   └─────────────────┘
                                               │                       │
                                               └───────────┬───────────┘
@@ -58,32 +58,39 @@ Caller (REST)
                                                 │transcription.       │
                                                 │enriched              │
                                                 │(Stream, callId)      │
-                                                │Avro                  │
+                                                │JSON                  │
                                                 └───────────┬───────────┘
                                                             │
                                             ┌───────────────┼───────────────┐
                                             │               │               │
                                             ▼               ▼               ▼
                                    ┌────────────────┐  ┌──────────────┐  ┌──────────────┐
-                                   │reporting-nps    │  │PostgreSQL    │  │calls.dlq     │
-                                   │(Consumer)       │  │call_         │  │(Stream,      │
-                                   │(aggregations)   │  │transcriptions│  │ callId)      │
-                                   └────────────────┘  │               │  │JSON          │
-                                                       └──────────────┘  └──────────────┘
+                                   │reporting-nps    │  │Kafka Connect │  │calls.dlq     │
+                                   │(Consumer)       │  │JDBC Sink     │  │(Stream,      │
+                                   │(aggregations)   │  │(primary      │  │ callId)      │
+                                   └────────────────┘  │ writer)       │  │JSON          │
+                                                       │               │  └──────────────┘
+                                                       ▼               ▼
+                                              ┌─────────────────────┐
+                                              │  PostgreSQL         │
+                                              │  call_transcriptions│
+                                              └─────────────────────┘
 ```
 
 ## 4.2. Таблица топиков Kafka
 
 | Топик | Тип | Ключ | Формат | Репликация | Партиции | Описание |
 |-------|-----|------|--------|------------|----------|----------|
-| `calls.completed` | Stream | `callId` | Avro | 3 | 6 | Событие о завершённом звонке |
-| `calls.metadata` | Compacted Table | `callId` | Avro | 3 | 6 | Метаинформация звонка (жизненный цикл статусов) |
-| `calls.fraud-alerts` | Stream | `phone` | Avro | 3 | 6 | Алерты антифрод-модуля |
-| `transcription.raw` | Stream | `callId` | Avro | 3 | 6 | Сырая транскрипция диалога (симуляция) |
-| `transcription.summary` | Stream | `callId` | Avro | 3 | 6 | Суммаризация от LLM (проблема, решение, сентимент) |
-| `transcription.enriched` | Stream | `callId` | Avro | 3 | 6 | Обогащённая суммаризация с профилем клиента |
+| `calls.completed` | Stream | `callId` | JSON | 3 | 6 | Событие о завершённом звонке |
+| `calls.metadata` | Compacted Table | `callId` | JSON | 3 | 6 | Метаинформация звонка (жизненный цикл статусов) |
+| `calls.fraud-alerts` | Stream | `phone` | JSON | 3 | 6 | Алерты антифрод-модуля |
+| `transcription.raw` | Stream | `callId` | JSON | 3 | 6 | Сырая транскрипция диалога (симуляция) |
+| `transcription.summary` | Stream | `callId` | JSON | 3 | 6 | Суммаризация от LLM (проблема, решение, сентимент) |
+| `transcription.enriched` | Stream | `callId` | JSON | 3 | 6 | Обогащённая суммаризация с профилем клиента |
 | `calls.dlq` | Stream | `callId` | JSON | 3 | 6 | Dead Letter Queue для битых сообщений |
-| `customers.profile` | Compacted Table | `phone` | Avro | 3 | 6 | Профили клиентов (сегмент, риск-уровень) |
+| `customers.profile` | Compacted Table | `phone` | JSON | 3 | 6 | Профили клиентов (сегмент, риск-уровень) |
+| `calls.completed.agg` | Stream | `agentId` | JSON | 1 | 6 | **ksqlDB output**: агрегация завершённых звонков по agentId (call_count, avg_nps_score, last_call_at) |
+| `calls.fraud-alerts.agg` | Stream | `phone` | JSON | 1 | 6 | **ksqlDB output**: агрегация фрод-алертов по phone (alert_count) |
 
 ## 4.3. Описание потоков данных
 
@@ -97,7 +104,7 @@ call-processor
     │  валидация (duration > 0, phone format, agentId not null)
     │  enrichment (lookup customers.profile via KTable join)
     │
-    ├──[Kafka]──▶ calls.completed (key=callId, Avro)
+    ├──[Kafka]──▶ calls.completed (key=callId, JSON)
     │       │
     │       ├─▶ fraud-detector (Streams)
     │       │       │
@@ -110,7 +117,7 @@ call-processor
     │               ├─ генерация transcription.raw
     │               └─ enrichment с customers.profile
     │
-    └──[Kafka]──▶ calls.metadata (key=callId, Avro, compacted)
+    └──[Kafka]──▶ calls.metadata (key=callId, JSON, compacted)
             │
             └─▶ reporting-nps (Consumer)
                     │
@@ -143,7 +150,7 @@ fraud-detector
     │  - эскалация: 3x NPS < 2 за 1 день
     │  - аномальная длительность: duration > 300 сек
     │
-    └──[Kafka]──▶ calls.fraud-alerts (key=phone, Avro)
+    └──[Kafka]──▶ calls.fraud-alerts (key=phone, JSON)
             │
             └─▶ reporting-nps (Consumer)
                     │
@@ -159,7 +166,7 @@ transcription-analyzer (Producer)
     │  - генерация placeholder текста на основе duration
     │  - параметры: quality (0.0-1.0), language (ru/en)
     │
-    └──[Kafka]──▶ transcription.raw (key=callId, Avro)
+    └──[Kafka]──▶ transcription.raw (key=callId, JSON)
             │
             │  Streams processing:
             │  - извлечение ключевых слов (card, loan, fraud, complaint)
@@ -181,7 +188,7 @@ transcription.raw
     │    - urgency: low/medium/high/critical
     │    - confidence: 0.0-1.0
     │
-    └──[Kafka]──▶ transcription.summary (key=callId, Avro)
+    └──[Kafka]──▶ transcription.summary (key=callId, JSON)
             │
             │  Streams processing (enrichment-processor group):
             │  - broadcast enrichment with customers.profile (in-memory map)
@@ -200,7 +207,7 @@ transcription-analyzer (Streams)
     │  - lookup phone in customers.profile map for each summary event
     │  - добавление: segment, risk_level, priority
     │
-    └──[Kafka]──▶ transcription.enriched (key=callId, Avro)
+    └──[Kafka]──▶ transcription.enriched (key=callId, JSON)
             │
             ├─▶ Kafka Connect JDBC Sink (primary writer)
             │       │
@@ -216,7 +223,7 @@ transcription-analyzer (Streams)
 ```
 Bootstrap (CSV script / kafka-console-producer)
     │
-    └──[Kafka]──▶ customers.profile (key=phone, Avro, compacted)
+    └──[Kafka]──▶ customers.profile (key=phone, JSON, compacted)
                     │
                     │  Compacted topic (last value per phone):
                     │  - phone (key)
@@ -254,4 +261,180 @@ all services (error handlers)
             └─▶ reporting-nps (Consumer)
                     │
                     └─▶ PostgreSQL (error statistics)
+```
+
+## 4.4. ksqlDB Analytics Layer
+
+### 4.4.1. Архитектура
+
+```
+calls.completed (Kafka topic)
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    ksqlDB Server                             │
+│                    (port 8088, REST API)                     │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ External Stream: calls_completed_ext                  │  │
+│  │ (callId, phone, duration, agentId, npsScore,          │  │
+│  │  completedAt)                                         │  │
+│  └──────────────────────┬───────────────────────────────┘  │
+│                         │                                   │
+│                         ▼                                   │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Persistent Table: calls_completed_agg                 │  │
+│  │   - TUMBLING window: 5 MINUTES, GRACE: 1 MINUTE       │  │
+│  │   - GROUP BY: agentId                                 │  │
+│  │   - Metrics: call_count, avg_nps_score, last_call_at  │  │
+│  └──────────────────────┬───────────────────────────────┘  │
+│                         │                                   │
+│                         ▼                                   │
+│            calls.completed.agg (Kafka topic)                │
+└─────────────────────────────────────────────────────────────┘
+    │
+    ├─▶ reporting-nps (optional: consume pre-aggregated data)
+    └─▶ external analytics tools (via REST API)
+
+
+calls.fraud-alerts (Kafka topic)
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    ksqlDB Server (continued)                 │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ External Stream: calls_fraud_alerts_ext                │  │
+│  │ (phone, pattern, severity, count)                     │  │
+│  └──────────────────────┬───────────────────────────────┘  │
+│                         │                                   │
+│                         ▼                                   │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Persistent Table: fraud_alerts_filtered                │  │
+│  │   - GROUP BY: phone                                   │  │
+│  │   - Metric: alert_count                               │  │
+│  └──────────────────────┬───────────────────────────────┘  │
+│                         │                                   │
+│                         ▼                                   │
+│            calls.fraud-alerts.agg (Kafka topic)             │
+└─────────────────────────────────────────────────────────────┘
+    │
+    ├─▶ reporting-nps (optional: consume pre-aggregated data)
+    └─▶ external analytics tools (via REST API)
+```
+
+### 4.4.2. Автоматическая инициализация
+
+При запуске `docker compose --profile full up -d`:
+
+1. **ksqldb-server** запускается и подключается к Kafka (PLAINTEXT, port 9092)
+2. **ksqldb-init** (batch job) выполняет инициализацию:
+   ```bash
+   # Creates external streams
+   CREATE STREAM calls_completed_ext ...
+   CREATE STREAM calls_fraud_alerts_ext ...
+   
+   # Creates persistent aggregation tables
+   CREATE TABLE calls_completed_agg ... AS
+     SELECT agentId, COUNT(*) AS call_count,
+            AVG(npsScore) AS avg_nps_score,
+            MAX(completedAt) AS last_call_at
+     FROM calls_completed_ext
+     WINDOW TUMBLING (SIZE 5 MINUTES, GRACE PERIOD 1 MINUTE)
+     GROUP BY agentId EMIT CHANGES;
+   
+   CREATE TABLE fraud_alerts_filtered ... AS
+     SELECT phone, COUNT(*) AS alert_count
+     FROM calls_fraud_alerts_ext
+     GROUP BY phone EMIT CHANGES;
+   ```
+
+Скрипт: `infrastructure/kafka/ksqldb-init.sh`
+
+### 4.4.3. REST API для ad-hoc запросов
+
+ksqlDB предоставляет REST API на порту 8088:
+
+```bash
+# Get ksqlDB info
+curl http://localhost:8088/info
+
+# Show all streams
+curl -X POST http://localhost:8088/ksql \
+  -H "Content-Type: application/vnd.ksql.v1+json" \
+  -d '{"ksql": "SHOW STREAMS;"}'
+
+# Show all tables
+curl -X POST http://localhost:8088/ksql \
+  -H "Content-Type: application/vnd.ksql.v1+json" \
+  -d '{"ksql": "SHOW TABLES;"}'
+
+# Show active queries
+curl -X POST http://localhost:8088/ksql \
+  -H "Content-Type: application/vnd.ksql.v1+json" \
+  -d '{"ksql": "SHOW QUERIES;"}'
+
+# Ad-hoc query (requires websocket endpoint)
+# curl -X POST http://localhost:8088/ksql \
+#   -H "Content-Type: application/vnd.ksql.v1+json" \
+#   -d '{"ksql": "SELECT agentId, call_count FROM CALLS_COMPLETED_AGG ORDER BY call_count DESC LIMIT 10;"}'
+```
+
+### 4.4.4. Output Topics Schemas
+
+**`calls.completed.agg`:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `agentId` | STRING | Agent identifier |
+| `call_count` | BIGINT | Count of completed calls in window |
+| `avg_nps_score` | DOUBLE | Average NPS score in window |
+| `last_call_at` | LONG | Timestamp of last completed call |
+
+**`calls.fraud-alerts.agg`:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `phone` | STRING | Phone number |
+| `alert_count` | BIGINT | Count of fraud alerts in window |
+
+### 4.4.5. Быстрая проверка и демонстрация
+
+```bash
+# Run quick verification script
+./infrastructure/kafka/ksqldb-verify.sh
+
+# This script will:
+# 1. Check ksqlDB server status
+# 2. Show external streams and persistent tables
+# 3. Show active queries
+# 4. Generate 5 test calls via call-processor API
+# 5. Verify aggregation results
+# 6. Display demo query examples
+```
+
+### 4.4.6. Data Flow Summary
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    DATA FLOW SUMMARY                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  calls.completed ──▶ ksqlDB ──▶ calls_completed_agg ──▶     │
+│                          │            │                      │
+│                          │            └─▶ calls.completed.agg│
+│                          │                     │             │
+│                          │                     ├─▶ reporting- │
+│                          │                     │   nps        │
+│                          │                     └─▶ external   │
+│                          │                           tools    │
+│                                                              │
+│  calls.fraud-alerts ──▶ ksqlDB ──▶ fraud_alerts_filtered ──▶│
+│                              │            │                   │
+│                              │            └─▶ calls.fraud-   │
+│                              │               alerts.agg       │
+│                              │                     │         │
+│                              │                     ├─▶       │
+│                              │                     │         │
+│                              └─────────────────────┘         │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
 ```

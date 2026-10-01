@@ -601,7 +601,7 @@ class DLQIntegrationTest extends BaseIntegrationTest {
     @Test
     void shouldSendInvalidMessageToDLQ() throws Exception {
         // Send malformed message directly to Kafka
-        kafkaTemplate.send("calls.completed", "bad-call-id", "invalid-avro-data").get();
+        kafkaTemplate.send("calls.completed", "bad-call-id", "invalid-json-data").get();
 
         Awaitility.await()
             .atMost(10, TimeUnit.SECONDS)
@@ -615,7 +615,7 @@ class DLQIntegrationTest extends BaseIntegrationTest {
                 );
 
                 assertThat(records).isNotEmpty();
-                assertThat(records.get(0).value()).contains("invalid-avro-data");
+                assertThat(records.get(0).value()).contains("invalid-json-data");
             });
     }
 

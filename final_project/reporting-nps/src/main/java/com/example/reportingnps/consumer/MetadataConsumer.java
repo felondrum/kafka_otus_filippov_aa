@@ -1,19 +1,18 @@
 package com.example.reportingnps.consumer;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.reportingnps.entity.CallMetadata;
 import com.example.reportingnps.repository.CallMetadataRepository;
 import com.example.reportingnps.service.ReportService;
-import com.example.reportingnps.service.SentimentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.retry.backoff.BackOffPolicy;
-import org.springframework.retry.backoff.ExponentialBackOffPolicy;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -23,100 +22,66 @@ public class MetadataConsumer {
 
     private final CallMetadataRepository callMetadataRepository;
     private final ReportService reportService;
-    private final SentimentService sentimentService;
-    private final BackOffPolicy retryPolicy;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public MetadataConsumer(CallMetadataRepository callMetadataRepository,
-                            ReportService reportService,
-                            SentimentService sentimentService) {
+                            ReportService reportService) {
         this.callMetadataRepository = callMetadataRepository;
         this.reportService = reportService;
-        this.sentimentService = sentimentService;
-        this.retryPolicy = new ExponentialBackOffPolicy();
     }
 
     @KafkaListener(topics = "calls.metadata", groupId = "reporting-nps",
             containerFactory = "kafkaListenerContainerFactory")
-    public void consume(Map<String, Object> event, Acknowledgment ack) {
+    public void consume(String jsonEvent, Acknowledgment ack) {
         try {
-            CallMetadata metadata = convertToCallMetadata(event);
-            if (metadata != null) {
-                callMetadataRepository.save(metadata);
-                // Invalidate relevant caches
-                if (metadata.getCallId() != null) {
-                    reportService.evictMetadataCache(metadata.getCallId().toString());
-                }
-                reportService.evictReportCache();
+            JsonNode node = objectMapper.readTree(jsonEvent);
+            
+            String callIdStr = node.has("callId") ? node.get("callId").asText() : null;
+            String status = node.has("status") ? node.get("status").asText() : "PENDING";
+            
+            if (callIdStr == null || callIdStr.isEmpty()) {
+                log.warn("Received metadata event without callId, skipping");
+                ack.acknowledge();
+                return;
             }
+            
+            // Try to parse as UUID
+            UUID callId = null;
+            try {
+                callId = UUID.fromString(callIdStr);
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid UUID format for callId: {}, skipping metadata update", callIdStr);
+                ack.acknowledge();
+                return;
+            }
+            
+            // Try to find existing record and update status, or create new
+            Optional<CallMetadata> existingMetadata = callMetadataRepository.findByCallId(callId);
+            if (existingMetadata.isPresent()) {
+                CallMetadata metadata = existingMetadata.get();
+                metadata.setCallStatus(status);
+                callMetadataRepository.save(metadata);
+                log.info("Updated metadata status for callId={}, status={}", callId, status);
+            } else {
+                // Create minimal metadata record - will be enriched later by enriched transcription
+                CallMetadata newMetadata = new CallMetadata();
+                newMetadata.setCallId(callId);
+                newMetadata.setCallStatus(status);
+                newMetadata.setAgentId("unknown");
+                newMetadata.setCustomerPhone("unknown");
+                newMetadata.setCallStartTime(LocalDateTime.now());
+                callMetadataRepository.save(newMetadata);
+                log.info("Created minimal metadata record for callId={}, status={}", callId, status);
+            }
+            
+            // Invalidate relevant caches
+            reportService.evictMetadataCache(callIdStr);
+            reportService.evictReportCache();
+            
             ack.acknowledge();
         } catch (Exception e) {
             log.error("Failed to process metadata event: {}", e.getMessage(), e);
-            // On failure, do not acknowledge - event will be reprocessed
-            throw e;
+            throw new RuntimeException("Failed to process metadata event", e);
         }
-    }
-
-    private CallMetadata convertToCallMetadata(Map<String, Object> event) {
-        CallMetadata metadata = new CallMetadata();
-
-        if (event.containsKey("callId")) {
-            metadata.setCallId(UUID.fromString(event.get("callId").toString()));
-        }
-        if (event.containsKey("customerPhone")) {
-            metadata.setCustomerPhone(event.get("customerPhone").toString());
-        }
-        if (event.containsKey("agentId")) {
-            metadata.setAgentId(event.get("agentId").toString());
-        }
-        if (event.containsKey("callStartTime")) {
-            metadata.setCallStartTime(LocalDateTime.parse(event.get("callStartTime").toString()));
-        }
-        if (event.containsKey("callEndTime")) {
-            metadata.setCallEndTime(LocalDateTime.parse(event.get("callEndTime").toString()));
-        }
-        if (event.containsKey("callDuration")) {
-            metadata.setCallDuration(Integer.parseInt(event.get("callDuration").toString()));
-        }
-        if (event.containsKey("callStatus")) {
-            metadata.setCallStatus(event.get("callStatus").toString());
-        }
-        if (event.containsKey("queueName")) {
-            metadata.setQueueName(event.get("queueName").toString());
-        }
-        if (event.containsKey("ivrSelection")) {
-            metadata.setIvrSelection(event.get("ivrSelection").toString());
-        }
-        if (event.containsKey("callPurpose")) {
-            metadata.setCallPurpose(event.get("callPurpose").toString());
-        }
-        if (event.containsKey("sentimentScore")) {
-            metadata.setSentimentScore(new java.math.BigDecimal(event.get("sentimentScore").toString()));
-        }
-        if (event.containsKey("sentiment")) {
-            metadata.setSentiment(event.get("sentiment").toString());
-        }
-        if (event.containsKey("urgency")) {
-            metadata.setUrgency(event.get("urgency").toString());
-        }
-        if (event.containsKey("problem")) {
-            metadata.setProblem(event.get("problem").toString());
-        }
-        if (event.containsKey("solution")) {
-            metadata.setSolution(event.get("solution").toString());
-        }
-        if (event.containsKey("confidence")) {
-            metadata.setConfidence(Double.parseDouble(event.get("confidence").toString()));
-        }
-        if (event.containsKey("segment")) {
-            metadata.setSegment(event.get("segment").toString());
-        }
-        if (event.containsKey("riskLevel")) {
-            metadata.setRiskLevel(event.get("riskLevel").toString());
-        }
-        if (event.containsKey("priority")) {
-            metadata.setPriority(event.get("priority").toString());
-        }
-
-        return metadata;
     }
 }

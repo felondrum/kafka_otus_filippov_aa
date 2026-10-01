@@ -4,7 +4,7 @@
 
 Архитектурная документация событийно-ориентированной платформы для обработки звонков банковского колл-центра на базе Apache Kafka.
 
-**Стек:** Java 21, Spring Boot 3, Apache Kafka (KRaft), PostgreSQL 15, Avro, Docker Compose.
+**Стек:** Java 21, Spring Boot 3, Apache Kafka (KRaft), PostgreSQL 15, JSON, Docker Compose.
 
 **Уровень C4:** Container (Level 2).
 
@@ -126,7 +126,7 @@ make chaos-hard         # Hard Shutdown
 | Решение | Обоснование |
 |---------|-------------|
 | Apache Kafka (KRaft) | Отказ от ZooKeeper, упрощение инфраструктуры |
-| Avro + Schema Registry | Типобезопасность, эволюция схем |
+| JSON + Schema Registry | Типобезопасность, эволюция схем |
 | Kafka Streams | Exactly-once, stateful processing, RocksDB |
 | CQRS | Независимое масштабирование записи и чтения |
 | Docker Compose | Единая среда разработки, ARM64 совместимость |

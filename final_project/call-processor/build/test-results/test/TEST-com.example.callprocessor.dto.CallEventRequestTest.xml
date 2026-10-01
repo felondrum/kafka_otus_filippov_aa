@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.callprocessor.dto.CallEventRequestTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-30T12:27:32" hostname="MacBook-Pro-Anton-5.local" time="0.036">
+  <properties/>
+  <testcase name="shouldRejectZeroDuration()" classname="com.example.callprocessor.dto.CallEventRequestTest" time="0.03"/>
+  <testcase name="shouldRejectNpsScoreAbove10()" classname="com.example.callprocessor.dto.CallEventRequestTest" time="0.0"/>
+  <testcase name="shouldValidateValidRequest()" classname="com.example.callprocessor.dto.CallEventRequestTest" time="0.0"/>
+  <testcase name="shouldRejectNullCallId()" classname="com.example.callprocessor.dto.CallEventRequestTest" time="0.0"/>
+  <testcase name="shouldRejectNpsScoreBelow0()" classname="com.example.callprocessor.dto.CallEventRequestTest" time="0.001"/>
+  <testcase name="shouldRejectInvalidCallIdFormat()" classname="com.example.callprocessor.dto.CallEventRequestTest" time="0.001"/>
+  <testcase name="shouldRejectNullAgentId()" classname="com.example.callprocessor.dto.CallEventRequestTest" time="0.0"/>
+  <testcase name="shouldRejectInvalidPhoneFormat()" classname="com.example.callprocessor.dto.CallEventRequestTest" time="0.0"/>
+  <system-out><![CDATA[17:27:32.860 [Test worker] INFO org.hibernate.validator.internal.util.Version -- HV000001: Hibernate Validator 8.0.1.Final
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

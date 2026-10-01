@@ -24,7 +24,7 @@ class CallEventRequestTest {
     @Test
     void shouldValidateValidRequest() {
         CallEventRequest request = new CallEventRequest();
-        request.setCallId("call-123");
+        request.setCallId("550e8400-e29b-41d4-a716-446655440000");
         request.setPhone("+71234567890");
         request.setDuration(300);
         request.setAgentId("agent-1");
@@ -48,9 +48,23 @@ class CallEventRequestTest {
     }
 
     @Test
-    void shouldRejectInvalidPhoneFormat() {
+    void shouldRejectInvalidCallIdFormat() {
         CallEventRequest request = new CallEventRequest();
         request.setCallId("call-123");
+        request.setPhone("+71234567890");
+        request.setDuration(300);
+        request.setAgentId("agent-1");
+        request.setNpsScore(8);
+
+        Set<ConstraintViolation<CallEventRequest>> violations = validator.validate(request);
+        assertFalse(violations.isEmpty());
+        assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("callId")));
+    }
+
+    @Test
+    void shouldRejectInvalidPhoneFormat() {
+        CallEventRequest request = new CallEventRequest();
+        request.setCallId("550e8400-e29b-41d4-a716-446655440000");
         request.setPhone("invalid-phone");
         request.setDuration(300);
         request.setAgentId("agent-1");
@@ -64,7 +78,7 @@ class CallEventRequestTest {
     @Test
     void shouldRejectZeroDuration() {
         CallEventRequest request = new CallEventRequest();
-        request.setCallId("call-123");
+        request.setCallId("550e8400-e29b-41d4-a716-446655440000");
         request.setPhone("+71234567890");
         request.setDuration(0);
         request.setAgentId("agent-1");
@@ -78,7 +92,7 @@ class CallEventRequestTest {
     @Test
     void shouldRejectNullAgentId() {
         CallEventRequest request = new CallEventRequest();
-        request.setCallId("call-123");
+        request.setCallId("550e8400-e29b-41d4-a716-446655440000");
         request.setPhone("+71234567890");
         request.setDuration(300);
         request.setNpsScore(8);
@@ -91,7 +105,7 @@ class CallEventRequestTest {
     @Test
     void shouldRejectNpsScoreAbove10() {
         CallEventRequest request = new CallEventRequest();
-        request.setCallId("call-123");
+        request.setCallId("550e8400-e29b-41d4-a716-446655440000");
         request.setPhone("+71234567890");
         request.setDuration(300);
         request.setAgentId("agent-1");
@@ -105,7 +119,7 @@ class CallEventRequestTest {
     @Test
     void shouldRejectNpsScoreBelow0() {
         CallEventRequest request = new CallEventRequest();
-        request.setCallId("call-123");
+        request.setCallId("550e8400-e29b-41d4-a716-446655440000");
         request.setPhone("+71234567890");
         request.setDuration(300);
         request.setAgentId("agent-1");

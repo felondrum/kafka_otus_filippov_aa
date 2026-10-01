@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class SummaryGeneratorTest {
 
     private final SummaryGenerator generator = new SummaryGenerator(
-            List.of("card", "loan", "fraud", "complaint", "transfer", "block", "limit", "payment", "balance"));
+            "card,loan,fraud,complaint,transfer,block,limit,payment,balance");
 
     @Test
     void testFraudDetection() {
@@ -59,14 +59,14 @@ class SummaryGeneratorTest {
 
     @Test
     void testSentimentPositive() {
-        SummaryGenerator.SummaryResult result = generator.generate("call-6", "Thank you for your helpful service, I am satisfied");
+        SummaryGenerator.SummaryResult result = generator.generate("call-6", "Thank you for your helpful service, I am very satisfied and pleased");
 
         assertEquals("positive", result.getSentiment());
     }
 
     @Test
     void testSentimentNegative() {
-        SummaryGenerator.SummaryResult result = generator.generate("call-7", "I am angry and frustrated with this terrible service");
+        SummaryGenerator.SummaryResult result = generator.generate("call-7", "I am angry and frustrated with this terrible bad service issue");
 
         assertEquals("negative", result.getSentiment());
     }

@@ -2,6 +2,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - 'alerting-rules.yml'
+
 scrape_configs:
   # Prometheus self-monitoring
   - job_name: 'prometheus'
@@ -16,6 +19,11 @@ scrape_configs:
           - 'kafka-2:5556'
           - 'kafka-3:5556'
 
+  # Kafka Exporter (topics, partitions, consumer lag)
+  - job_name: 'kafka-exporter'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+
   # PostgreSQL exporters
   - job_name: 'postgresql'
     static_configs:
@@ -27,23 +35,23 @@ scrape_configs:
     static_configs:
       - targets: ['grafana:3000', 'kafdrop:9000', 'kafka-connect:8083']
 
-  # Schema Registry
-  - job_name: 'schema-registry'
+  # Microservice targets (Spring Boot Actuator Prometheus endpoints)
+  - job_name: 'call-processor'
+    metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['schema-registry:8085']
+      - targets: ['call-processor:8081']
 
-  # Microservice targets (placeholder for future services)
-  # - job_name: 'call-processor'
-  #   metrics_path: '/actuator/prometheus'
-  #   static_configs:
-  #     - targets: ['call-processor:8080']
-  #
-  # - job_name: 'fraud-detector'
-  #   metrics_path: '/actuator/prometheus'
-  #   static_configs:
-  #     - targets: ['fraud-detector:8081']
-  #
-  # - job_name: 'transcription-analyzer'
-  #   metrics_path: '/actuator/prometheus'
-  #   static_configs:
-  #     - targets: ['transcription-analyzer:8083']
+  - job_name: 'fraud-detector'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['fraud-detector:8082']
+
+  - job_name: 'transcription-analyzer'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['transcription-analyzer:8083']
+
+  - job_name: 'reporting-nps'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['reporting-nps:8084']

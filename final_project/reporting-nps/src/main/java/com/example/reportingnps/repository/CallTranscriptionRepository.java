@@ -16,15 +16,15 @@ public interface CallTranscriptionRepository extends JpaRepository<CallTranscrip
 
     Optional<CallTranscription> findByCallId(UUID callId);
 
-    @Query("SELECT ct.sentiment, COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment IS NOT NULL AND ct.callStartTime BETWEEN :from AND :to GROUP BY ct.sentiment")
+    @Query("SELECT ct.sentiment, COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment IS NOT NULL AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime BETWEEN :from AND :to) GROUP BY ct.sentiment")
     List<Object[]> countBySentimentBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
-    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment = 'POSITIVE' AND ct.callStartTime BETWEEN :from AND :to")
+    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment = 'POSITIVE' AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime BETWEEN :from AND :to)")
     long countPositiveBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
-    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment = 'NEUTRAL' AND ct.callStartTime BETWEEN :from AND :to")
+    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment = 'NEUTRAL' AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime BETWEEN :from AND :to)")
     long countNeutralBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
-    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment = 'NEGATIVE' AND ct.callStartTime BETWEEN :from AND :to")
+    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment = 'NEGATIVE' AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime BETWEEN :from AND :to)")
     long countNegativeBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 }

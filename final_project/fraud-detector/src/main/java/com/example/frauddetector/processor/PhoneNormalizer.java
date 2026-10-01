@@ -2,17 +2,12 @@ package com.example.frauddetector.processor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 /**
  * Normalizes phone numbers to E.164 format (+7XXXXXXXXXX).
- * Handles various input formats:
- * - 8XXXXXXXXXX -> +7XXXXXXXXXX
- * - 7XXXXXXXXXX -> +7XXXXXXXXXX
- * - +7XXXXXXXXXX -> +7XXXXXXXXXX
- * - +8XXXXXXXXXX -> +7XXXXXXXXXX
- * - 8(XXX)XXX-XX-XX -> +7XXXXXXXXXX
- * - +7(XXX)XXX-XX-XX -> +7XXXXXXXXXX
  */
+@Component
 public class PhoneNormalizer {
 
     private static final Logger log = LoggerFactory.getLogger(PhoneNormalizer.class);

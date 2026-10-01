@@ -1,12 +1,11 @@
 package com.example.frauddetector.stream;
 
 import org.springframework.context.annotation.Configuration;
-import org.springframework.kafka.annotation.EnableKafkaStreams;
 
 /**
- * Enables Kafka Streams for the fraud-detector application.
+ * Kafka Streams configuration placeholder.
+ * Main configuration is in StreamsTopologyConfig.
  */
 @Configuration
-@EnableKafkaStreams
 public class FraudDetectorStreamsConfig {
 }

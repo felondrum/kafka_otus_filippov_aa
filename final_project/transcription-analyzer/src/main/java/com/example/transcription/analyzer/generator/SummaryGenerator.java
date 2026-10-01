@@ -15,8 +15,12 @@ public class SummaryGenerator {
 
     private final List<String> keywords;
 
-    public SummaryGenerator(@Value("${transcription.keywords}") List<String> keywords) {
-        this.keywords = keywords.stream().map(String::toLowerCase).collect(Collectors.toList());
+    public SummaryGenerator(@Value("${transcription.keywords:card,loan,fraud,complaint,transfer,block,limit,payment,balance}") String keywordsStr) {
+        this.keywords = Arrays.stream(keywordsStr.split(","))
+                .map(String::trim)
+                .map(String::toLowerCase)
+                .collect(Collectors.toList());
+        log.info("Loaded {} keywords: {}", keywords.size(), keywords);
     }
 
     /**
@@ -115,13 +119,10 @@ public class SummaryGenerator {
      * Analyze sentiment based on keyword matching.
      */
     private String analyzeSentiment(String lowerText, List<String> matchedKeywords) {
-        if (matchedKeywords.isEmpty()) {
-            return "neutral";
-        }
-
         // Negative indicators
         String[] negativeWords = {"angry", "frustrated", "unhappy", "disappointed", "bad", "terrible",
-                "worst", "hate", "complaint", "complain", "fraud", "unauthorized", "stolen", "lost"};
+                "worst", "hate", "complaint", "complain", "fraud", "unauthorized", "stolen", "lost",
+                "angry", "issue", "problem", "error", "fail"};
         int negativeCount = 0;
         for (String word : negativeWords) {
             if (lowerText.contains(word)) negativeCount++;
@@ -129,16 +130,16 @@ public class SummaryGenerator {
 
         // Positive indicators
         String[] positiveWords = {"happy", "satisfied", "great", "excellent", "good", "thank", "thanks",
-                "appreciate", "helpful", "resolved", "fixed", "perfect"};
+                "appreciate", "helpful", "resolved", "fixed", "perfect", "pleased"};
         int positiveCount = 0;
         for (String word : positiveWords) {
             if (lowerText.contains(word)) positiveCount++;
         }
 
-        if (negativeCount > positiveCount + 1) {
+        if (negativeCount > positiveCount) {
             return "negative";
         }
-        if (positiveCount > negativeCount + 1) {
+        if (positiveCount > negativeCount) {
             return "positive";
         }
         return "neutral";

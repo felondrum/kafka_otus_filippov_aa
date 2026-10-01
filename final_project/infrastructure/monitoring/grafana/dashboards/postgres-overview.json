@@ -46,7 +46,7 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "pg_stat_activity_count",
+          "expr": "pg_stat_activity_count{datname=~\"$database\"}",
           "legendFormat": "Connections",
           "refId": "A"
         }
@@ -92,7 +92,7 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sum by (datname) (pg_stat_database_tup_fetched)",
+          "expr": "sum by (datname) (pg_stat_database_tup_fetched{datname=~\"$database\"})",
           "legendFormat": "Rows Fetched",
           "refId": "A"
         }
@@ -138,7 +138,7 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sum by (datname) (pg_stat_database_tup_inserted + pg_stat_database_tup_updated + pg_stat_database_tup_deleted)",
+          "expr": "sum by (datname) (pg_stat_database_tup_inserted{datname=~\"$database\"} + pg_stat_database_tup_updated{datname=~\"$database\"} + pg_stat_database_tup_deleted{datname=~\"$database\"})",
           "legendFormat": "Writes",
           "refId": "A"
         }
@@ -184,7 +184,7 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "pg_stat_activity_count{datname=\"call_platform\", state=\"active\"}",
+          "expr": "pg_stat_activity_count{datname=~\"$database\", state=\"active\"}",
           "legendFormat": "Active",
           "refId": "A"
         }
@@ -230,12 +230,12 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sum by (datname) (rate(pg_stat_database_xact_commit[5m]))",
+          "expr": "sum by (datname) (rate(pg_stat_database_xact_commit{datname=~\"$database\"}[5m]))",
           "legendFormat": "{{datname}} Commits",
           "refId": "A"
         },
         {
-          "expr": "sum by (datname) (rate(pg_stat_database_xact_rollback[5m]))",
+          "expr": "sum by (datname) (rate(pg_stat_database_xact_rollback{datname=~\"$database\"}[5m]))",
           "legendFormat": "{{datname}} Rollbacks",
           "refId": "B"
         }
@@ -281,17 +281,17 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sum by (datname) (rate(pg_stat_database_tup_fetched[5m]))",
+          "expr": "sum by (datname) (rate(pg_stat_database_tup_fetched{datname=~\"$database\"}[5m]))",
           "legendFormat": "{{datname}} Fetch",
           "refId": "A"
         },
         {
-          "expr": "sum by (datname) (rate(pg_stat_database_tup_inserted[5m]))",
+          "expr": "sum by (datname) (rate(pg_stat_database_tup_inserted{datname=~\"$database\"}[5m]))",
           "legendFormat": "{{datname}} Insert",
           "refId": "B"
         },
         {
-          "expr": "sum by (datname) (rate(pg_stat_database_tup_updated[5m]))",
+          "expr": "sum by (datname) (rate(pg_stat_database_tup_updated{datname=~\"$database\"}[5m]))",
           "legendFormat": "{{datname}} Update",
           "refId": "C"
         }
@@ -337,12 +337,12 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "pg_stat_activity_count{datname=\"call_platform\"}",
-          "legendFormat": "call_platform",
+          "expr": "pg_stat_activity_count{datname=~\"$database\"}",
+          "legendFormat": "{{datname}}",
           "refId": "A"
         }
       ],
-      "title": "Connections (call_platform)",
+      "title": "Connections",
       "type": "timeseries"
     },
     {
@@ -383,7 +383,7 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "pg_stat_database_blks_hit / (pg_stat_database_blks_hit + pg_stat_database_blks_read) * 100",
+          "expr": "pg_stat_database_blks_hit{datname=~\"$database\"} / (pg_stat_database_blks_hit{datname=~\"$database\"} + pg_stat_database_blks_read{datname=~\"$database\"}) * 100",
           "legendFormat": "Cache Hit %",
           "refId": "A"
         }
@@ -398,7 +398,32 @@
     "infrastructure"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "definition": "label_values(pg_stat_activity_count, datname)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "database",
+        "options": [],
+        "query": "label_values(pg_stat_activity_count, datname)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-1h",
@@ -407,5 +432,5 @@
   "timepicker": {},
   "title": "PostgreSQL Overview",
   "uid": "postgres-overview",
-  "version": 1
+  "version": 2
 }

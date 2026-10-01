@@ -19,7 +19,7 @@ public class HealthController {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @GetMapping("/api/health")
+    @GetMapping("health")
     public ResponseEntity<Map<String, Object>> health() {
         Map<String, Object> response = new HashMap<>();
         try {

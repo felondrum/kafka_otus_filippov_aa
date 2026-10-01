@@ -5,9 +5,10 @@ import com.example.reportingnps.service.SentimentService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.bean.MockBean;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -28,10 +29,7 @@ class SentimentControllerTest {
                 50, 30, 20, 50.0, 30.0, 20.0
         );
 
-        when(sentimentService.getSentimentDistribution(
-                org.junit.jupiter.api.Assertions.any(),
-                org.junit.jupiter.api.Assertions.any()
-        )).thenReturn(response);
+        when(sentimentService.getSentimentDistribution(any(), any())).thenReturn(response);
 
         // When & Then
         mockMvc.perform(get("/api/sentiment/distribution"))

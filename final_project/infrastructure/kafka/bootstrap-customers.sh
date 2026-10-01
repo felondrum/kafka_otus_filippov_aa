@@ -6,6 +6,7 @@ set -e
 CSV_FILE="/tmp/customers.csv"
 KAFKA_BROKER="${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9092,kafka-3:9092}"
 TOPIC="customers.profile"
+KAFKA_CONSOLE_PRODUCER="/usr/bin/kafka-console-producer"
 
 echo "=========================================="
 echo "Bootstrapping customers.profile topic"
@@ -17,7 +18,7 @@ echo "Topic: $TOPIC"
 echo ""
 echo "Waiting for Kafka to be ready..."
 for i in $(seq 1 30); do
-    if kafka-console-producer.sh \
+    if $KAFKA_CONSOLE_PRODUCER \
         --broker-list "$KAFKA_BROKER" \
         --topic "$TOPIC" \
         --property "parse.key=true" \
@@ -25,7 +26,7 @@ for i in $(seq 1 30); do
         echo "Kafka is ready!"
         break
     fi
-    if [ "$i" -eq 30 ]; then
+    if [ "$i" -eq "30" ]; then
         echo "ERROR: Kafka not ready after 30 retries"
         exit 1
     fi
@@ -55,7 +56,7 @@ echo ""
 echo "Producing customer data to Kafka..."
 tail -n +2 "$CSV_FILE" | while IFS=',' read -r phone segment riskLevel; do
     echo "${phone}:{\"phone\":\"${phone}\",\"segment\":\"${segment}\",\"riskLevel\":\"${riskLevel}\"}"
-done | kafka-console-producer.sh \
+done | $KAFKA_CONSOLE_PRODUCER \
     --broker-list "$KAFKA_BROKER" \
     --topic "$TOPIC" \
     --property "parse.key=true" \

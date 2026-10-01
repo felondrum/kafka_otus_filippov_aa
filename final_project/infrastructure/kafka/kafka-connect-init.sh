@@ -4,139 +4,136 @@
 set -e
 
 KAFKA_CONNECT_URL="${KAFKA_CONNECT_URL:-http://kafka-connect:8083}"
-SCHEMA_REGISTRY_URL="${SCHEMA_REGISTRY_URL:-http://schema-registry:8081}"
+SCHEMA_REGISTRY_URL="${SCHEMA_REGISTRY_URL:-http://schema-registry:8085}"
+CONNECTOR_NAME="kafka-connect-jdbc-sink"
 
 echo "=========================================="
 echo "Deploying Kafka Connect JDBC Sink Connector"
 echo "=========================================="
 echo "Kafka Connect: $KAFKA_CONNECT_URL"
+echo "Connector: $CONNECTOR_NAME"
 echo "Schema Registry: $SCHEMA_REGISTRY_URL"
 
 # Wait for Kafka Connect to be ready
 echo ""
 echo "Waiting for Kafka Connect to be ready..."
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
     if curl -sf "$KAFKA_CONNECT_URL/" > /dev/null 2>&1; then
         echo "Kafka Connect is ready!"
         break
     fi
-    if [ "$i" -eq 30 ]; then
-        echo "ERROR: Kafka Connect not ready after 30 retries"
+    if [ "$i" -eq "60" ]; then
+        echo "ERROR: Kafka Connect not ready after 60 retries"
         exit 1
     fi
-    echo "Attempt $i/30 - Kafka Connect not ready, waiting 5s..."
+    echo "Attempt $i/60 - waiting 5s..."
     sleep 5
 done
 
 # Wait for Schema Registry to be ready
 echo ""
 echo "Waiting for Schema Registry to be ready..."
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
     if curl -sf "$SCHEMA_REGISTRY_URL/" > /dev/null 2>&1; then
         echo "Schema Registry is ready!"
         break
     fi
-    if [ "$i" -eq 30 ]; then
-        echo "ERROR: Schema Registry not ready after 30 retries"
+    if [ "$i" -eq "60" ]; then
+        echo "ERROR: Schema Registry not ready after 60 retries"
         exit 1
     fi
-    echo "Attempt $i/30 - Schema Registry not ready, waiting 5s..."
+    echo "Attempt $i/60 - waiting 5s..."
     sleep 5
 done
 
 # Check if connector already exists
-CONNECTOR_NAME="kafka-connect-jdbc-sink"
 echo ""
 echo "Checking if connector '$CONNECTOR_NAME' already exists..."
 if curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME" > /dev/null 2>&1; then
-    echo "Connector '$CONNECTOR_NAME' already exists. Updating configuration..."
-    
-    # Get existing config
-    EXISTING_CONFIG=$(curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/config")
-    echo "Existing config retrieved."
+    echo "Connector exists. Updating configuration..."
+    HTTP_METHOD="PUT"
 else
-    EXISTING_CONFIG=""
-    echo "Connector '$CONNECTOR_NAME' does not exist. Creating new connector..."
+    echo "Connector does not exist. Creating new connector..."
+    HTTP_METHOD="POST"
 fi
 
 # Deploy/Update connector configuration
 echo ""
-echo "Deploying JDBC Sink connector..."
+echo "Deploying JDBC Sink connector via $HTTP_METHOD..."
 
 CONNECTOR_CONFIG='{
-  "name": "'$CONNECTOR_NAME'",
+  "name": "kafka-connect-jdbc-sink",
   "config": {
     "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
-    "tasks.max": "6",
-    "connection.url": "jdbc:postgresql://postgres:5432/call_platform",
+    "tasks.max": "3",
+    "connection.url": "jdbc:postgresql://postgres:5432/call_platform?sslmode=disable",
     "connection.user": "kafka-connect-user",
     "connection.password": "kafka-connect-secret",
     "topics": "transcription.enriched",
     "table.name.format": "call_transcriptions",
-    "pk.mode": "RecordKey",
-    "pk.fields": "call_id",
+    "pk.mode": "none",
     "auto.create": "false",
-    "insert.mode": "upsert",
-    "delete.captured.records": "false",
-    "transforms": "extract,replace",
-    "transforms.extract.type": "org.apache.kafka.connect.transforms.ExtractField$Value",
-    "transforms.extract.field": "value",
-    "transforms.replace.type": "org.apache.kafka.connect.transforms.ReplaceString$Value",
-    "schema.registry.url": "'$SCHEMA_REGISTRY_URL'",
+    "auto.evolve": "false",
+    "insert.mode": "insert",
+    "batch.size": 100,
+    "flush.max.records": 500,
+    "retry.backoff.ms": 1000,
+    "max.retries": 3,
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "transcription.enriched.dlq",
+    "errors.deadletterqueue.topic.replication.factor": 3,
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true",
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
-    "key.converter.schemas.allow": "false",
-    "value.converter": "io.confluent.connect.avro.AvroConverter",
-    "value.converter.schema.registry.url": "'$SCHEMA_REGISTRY_URL'"
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "true"
   }
 }'
 
-HTTP_CODE=$(curl -sf -X PUT \
+RESPONSE=$(curl -sf -X "$HTTP_METHOD" \
     -H "Content-Type: application/json" \
     -d "$CONNECTOR_CONFIG" \
-    "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/config" \
-    -w "%{http_code}" \
-    -o /tmp/connector_response.txt 2>&1)
+    "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME" \
+    -w "\n%{http_code}" 2>&1)
+
+HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+BODY=$(echo "$RESPONSE" | head -n -1)
+
+echo "HTTP Status: $HTTP_CODE"
 
 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-    echo "Connector '$CONNECTOR_NAME' deployed successfully (HTTP $HTTP_CODE)"
+    echo "Connector deployed successfully!"
 else
     echo "Failed to deploy connector (HTTP $HTTP_CODE)"
-    echo "Response: $(cat /tmp/connector_response.txt)"
+    echo "Response: $BODY"
     exit 1
 fi
 
 # Wait for connector to start
 echo ""
-echo "Waiting for connector to start..."
-for i in $(seq 1 30); do
-    CONNECTOR_STATUS=$(curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/status" | jq -r '.connector.status' 2>/dev/null)
-    if [ "$CONNECTOR_STATUS" = "RUNNING" ]; then
+echo "Waiting for connector to become RUNNING..."
+for i in $(seq 1 60); do
+    STATUS=$(curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/status" | jq -r '.connector.status' 2>/dev/null)
+    if [ "$STATUS" = "RUNNING" ]; then
         echo "Connector is RUNNING!"
         break
     fi
-    if [ "$i" -eq 30 ]; then
-        echo "WARNING: Connector did not reach RUNNING state after 30 retries"
-        echo "Connector status: $CONNECTOR_STATUS"
-        echo "Task statuses:"
-        curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/status" | jq '.tasks' 2>/dev/null || echo "Could not get task status"
+    if [ "$i" -eq "60" ]; then
+        echo "WARNING: Connector did not reach RUNNING state"
+        curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/status" | jq '.' 2>/dev/null
     else
-        echo "Attempt $i/30 - Connector status: $CONNECTOR_STATUS, waiting 5s..."
+        echo "Attempt $i/60 - Status: $STATUS, waiting 5s..."
         sleep 5
     fi
 done
 
-# Verify connector
+# Final verification
 echo ""
 echo "=========================================="
-echo "Connector Deployment Summary"
+echo "Deployment Summary"
 echo "=========================================="
 echo "Connector: $CONNECTOR_NAME"
-echo "Status: $(curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/status" | jq -r '.connector.status' 2>/dev/null || echo 'UNKNOWN')"
+curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/status" | jq '.' 2>/dev/null || echo "Could not get status"
 echo ""
-echo "Connector config:"
-curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/config" | jq '.' 2>/dev/null || echo "Could not get config"
-echo ""
-echo "Connector tasks:"
-curl -sf "$KAFKA_CONNECT_URL/connectors/$CONNECTOR_NAME/status" | jq '.tasks' 2>/dev/null || echo "Could not get tasks"
-echo ""
-echo "JDBC Sink connector deployment complete!"
+echo "Done!"

@@ -45,7 +45,7 @@
 |---------|-----------|----------|
 | **LLM Service (симуляция)** | In-process | Транскрибация и суммаризация диалогов (симуляция LLM в transcription-analyzer) |
 | **PostgreSQL** | JDBC (Kafka Connect + direct) | Аналитическое хранилище для отчётности и архивации |
-| **Schema Registry** | HTTP API | Централизованное хранение Avro-схем событий |
+| **Schema Registry** | HTTP API | Централизованное хранение JSON-схем событий |
 
 ## 2.5. Связи
 

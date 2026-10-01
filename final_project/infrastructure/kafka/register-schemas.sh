@@ -1,13 +1,13 @@
 #!/bin/bash
-# Register Avro schemas in Schema Registry
+# Register JSON schemas in Schema Registry
 # This script registers all required schemas for the Kafka topics
 set -e
 
-SCHEMA_REGISTRY_URL="${SCHEMA_REGISTRY_URL:-http://schema-registry:8081}"
+SCHEMA_REGISTRY_URL="${SCHEMA_REGISTRY_URL:-http://schema-registry:8085}"
 SCHEMA_DIR="${SCHEMA_DIR:-/tmp/schemas}"
 
 echo "=========================================="
-echo "Registering Avro schemas in Schema Registry"
+echo "Registering JSON schemas in Schema Registry"
 echo "=========================================="
 echo "Schema Registry: $SCHEMA_REGISTRY_URL"
 echo "Schema directory: $SCHEMA_DIR"
@@ -32,7 +32,7 @@ done
 register_schema() {
     local topic_name=$1
     local schema_file=$2
-    local subject="$topicName-value"
+    local subject="$topic_name-value"
     
     echo ""
     echo "Registering schema for: $topic_name"
@@ -101,10 +101,31 @@ echo "=========================================="
 echo "Registering transcription-analyzer schemas"
 echo "=========================================="
 
-register_schema "transcription.raw" "$SCHEMA_DIR/RawTranscription.avsc"
-register_schema "transcription.summary" "$SCHEMA_DIR/TranscriptionSummary.avsc"
-register_schema "transcription.enriched" "$SCHEMA_DIR/EnrichedTranscription.avsc"
-register_schema "calls.metadata" "$SCHEMA_DIR/CallMetadata.avsc"
+register_schema "transcription.raw" "$SCHEMA_DIR/RawTranscription.json"
+register_schema "transcription.summary" "$SCHEMA_DIR/TranscriptionSummary.json"
+register_schema "transcription.enriched" "$SCHEMA_DIR/EnrichedTranscription.json"
+register_schema "calls.metadata" "$SCHEMA_DIR/CallMetadata.json"
+
+echo ""
+echo "=========================================="
+echo "Registering call-processor schemas"
+echo "=========================================="
+
+register_schema "calls.completed" "$SCHEMA_DIR/CallEvent.json"
+
+echo ""
+echo "=========================================="
+echo "Registering fraud-detector schemas"
+echo "=========================================="
+
+register_schema "calls.fraud-alerts" "$SCHEMA_DIR/FraudAlert.json"
+
+echo ""
+echo "=========================================="
+echo "Registering transcription-analyzer schemas"
+echo "=========================================="
+
+register_schema "customers.profile" "$SCHEMA_DIR/CustomerProfile.json"
 
 echo ""
 echo "=========================================="

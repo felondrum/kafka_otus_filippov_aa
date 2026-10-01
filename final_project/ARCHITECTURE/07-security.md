@@ -24,6 +24,7 @@ KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND=false
 | `fraud-detector-user` | Consumer + Producer | Read: calls.completed; Write: calls.fraud-alerts |
 | `transcription-analyzer-user` | Consumer + Producer | Read: calls.completed, customers.profile; Write: transcription.raw, transcription.summary, transcription.enriched, calls.metadata |
 | `reporting-nps-user` | Consumer | Read: calls.metadata, calls.fraud-alerts, transcription.enriched |
+| `kafka-connect-user` | Consumer | Read: transcription.enriched (JDBC Sink) |
 | `postgres-user` | Kafka Connect | JDBC (PostgreSQL) |
 
 ### 7.1.3. Клиентская конфигурация
@@ -111,10 +112,10 @@ schema-registry:
 | `compatibility.group.level` | `TOPIC` | Совместимость на уровне топика |
 | `subject.name.strategy` | `TOPIC_RECORD_VALUE` | Именование схем: `{topic}-value` |
 
-### 7.3.3. Avro-схемы
+### 7.3.3. JSON-схемы
 
 ```text
-// calls.completed-value.avsc
+// calls.completed-value.json
 {
   "namespace": "ru.otus.callplatform.schema",
   "type": "record",
@@ -132,7 +133,7 @@ schema-registry:
 ```
 
 ```text
-// calls.fraud-alerts-value.avsc
+// calls.fraud-alerts-value.json
 {
   "namespace": "ru.otus.callplatform.schema",
   "type": "record",
@@ -224,7 +225,7 @@ public class SecurityConfig {
 | `postgres` | Superuser (dev only) |
 | `reporting-nps-user` | SELECT, INSERT на call_metadata, call_transcriptions |
 | `transcription-analyzer-user` | INSERT на call_transcriptions |
-| `kafka-connect-user` | SELECT, INSERT на все таблицы (JDBC Sink) |
+| `kafka-connect-user` | SELECT, INSERT на call_transcriptions (JDBC Sink, minimal privileges) |
 
 ### 7.6.2. Инициализация БД
 
@@ -245,7 +246,8 @@ GRANT USAGE ON SCHEMA public TO kafka_connect_user;
 GRANT SELECT, INSERT ON call_metadata TO reporting_nps_user;
 GRANT SELECT, INSERT ON call_transcriptions TO reporting_nps_user;
 GRANT INSERT ON call_transcriptions TO transcription_analyzer_user;
-GRANT SELECT, INSERT ON call_metadata, call_transcriptions TO kafka_connect_user;
+GRANT SELECT, INSERT ON call_transcriptions TO kafka_connect_user;
+REVOKE ALL ON call_metadata FROM kafka_connect_user;
 ```
 
 ## 7.7. Корреляционные ID (Tracing)

@@ -41,22 +41,17 @@ public class MetadataController {
             size = 200;
         }
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by("callStartTime").descending());
-        Page<CallMetadata> callPage = callMetadataRepository.findAll(
-                org.springframework.data.jpa.repository.JpaRepository<CallMetadata, UUID>
-                        .super::findAll, pageable);
-
-        // Manual pagination since we need to filter by status
+        // Get all calls with the given status (large batch for pagination)
         var allCalls = callMetadataRepository.findByCallStatus(status, PageRequest.of(0, size * 1000));
         long totalElements = allCalls.size();
         int totalPages = (int) Math.ceil((double) totalElements / size);
 
         int fromIndex = page * size;
-        int toIndex = Math.min(fromIndex + size, totalElements);
+        int toIndex = Math.min(fromIndex + size, (int) totalElements);
 
         var content = fromIndex < totalElements ?
                 allCalls.subList(fromIndex, toIndex) :
-                java.util.Collections.emptyList();
+                java.util.Collections.<CallMetadata>emptyList();
 
         PageResponse<CallMetadata> response = new PageResponse<>(
                 content, page, size, totalElements, totalPages);

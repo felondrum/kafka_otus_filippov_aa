@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Pattern;
 public class CallEventRequest {
 
     @NotBlank(message = "callId is required")
+    @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", message = "callId must be a valid UUID", flags = Pattern.Flag.CASE_INSENSITIVE)
     private String callId;
 
     @NotBlank(message = "phone is required")

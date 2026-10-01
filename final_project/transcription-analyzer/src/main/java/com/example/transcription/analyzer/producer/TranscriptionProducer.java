@@ -1,6 +1,7 @@
 package com.example.transcription.analyzer.producer;
 
-import com.example.transcription.avro.RawTranscription;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,56 +9,73 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Component
 public class TranscriptionProducer {
 
     private static final Logger log = LoggerFactory.getLogger(TranscriptionProducer.class);
 
-    private final KafkaTemplate<String, RawTranscription> kafkaTemplate;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final Random random = new Random();
     private final List<String> textTemplates;
     private final int wordsPerMinute;
 
     public TranscriptionProducer(
-            KafkaTemplate<String, RawTranscription> kafkaTemplate,
-            @Value("${transcription.text-templates}") List<String> textTemplates,
+            KafkaTemplate<String, String> kafkaTemplate,
+            @Value("${transcription.text-templates:|I am calling regarding {topic}|Could you please provide more details about {topic}|Let me check that information for you|I understand your concern about {topic}|Is there anything else I can help you with|}") String templatesStr,
             @Value("${transcription.words-per-minute:150}") int wordsPerMinute) {
         this.kafkaTemplate = kafkaTemplate;
-        this.textTemplates = textTemplates;
+        this.textTemplates = Arrays.stream(templatesStr.split("\\|"))
+                .filter(s -> !s.trim().isEmpty())
+                .collect(Collectors.toList());
         this.wordsPerMinute = wordsPerMinute;
+        log.info("Loaded {} text templates", this.textTemplates.size());
     }
 
     /**
      * Generate and produce a synthetic transcription for a completed call.
      * @param callId unique call identifier
      * @param durationMinutes call duration in minutes
-     * @return the produced RawTranscription record
+     * @return the produced RawTranscription JSON
      */
-    public RawTranscription produce(String callId, double durationMinutes) {
+    public Map<String, Object> produce(String callId, double durationMinutes) {
         String text = generateText(durationMinutes);
         float quality = generateQuality();
         String language = generateLanguage();
 
-        RawTranscription record = new RawTranscription(callId, text, quality, language);
+        Map<String, Object> record = Map.of(
+                "callId", callId,
+                "text", text,
+                "quality", quality,
+                "language", language
+        );
 
-        CompletableFuture<SendResult<String, RawTranscription>> future =
-                kafkaTemplate.send("transcription.raw", callId, record);
+        try {
+            String json = objectMapper.writeValueAsString(record);
+            CompletableFuture<SendResult<String, String>> future =
+                    kafkaTemplate.send("transcription.raw", callId, json);
 
-        future.whenComplete((result, ex) -> {
-            if (ex == null) {
-                log.info("Produced raw transcription: callId={}, topic={}, partition={}, offset={}",
-                        callId,
-                        result.getRecordMetadata().topic(),
-                        result.getRecordMetadata().partition(),
-                        result.getRecordMetadata().offset());
-            } else {
-                log.error("Failed to produce raw transcription: callId={}", callId, ex);
-            }
-        });
+            future.whenComplete((result, ex) -> {
+                if (ex == null) {
+                    log.info("Produced raw transcription: callId={}, topic={}, partition={}, offset={}",
+                            callId,
+                            result.getRecordMetadata().topic(),
+                            result.getRecordMetadata().partition(),
+                            result.getRecordMetadata().offset());
+                } else {
+                    log.error("Failed to produce raw transcription: callId={}", callId, ex);
+                }
+            });
+        } catch (Exception e) {
+            log.error("Failed to serialize raw transcription: callId={}", callId, e);
+        }
 
         return record;
     }

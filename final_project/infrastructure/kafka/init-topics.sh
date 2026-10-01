@@ -45,21 +45,34 @@ create_topic() {
     
     echo "Creating topic: $topic (partitions=$partitions, replication=$replication)"
     
-    if $KAFKA_TOPICS --bootstrap-server "$BOOTSTRAP_SERVERS" \
-        --create \
-        --topic "$topic" \
-        --partitions "$partitions" \
-        --replication-factor "$replication" \
-        --config $config_args 2>&1; then
-        echo "  Topic '$topic' created successfully"
+    if [ -n "$config_args" ]; then
+        # Create with config (cleanup.policy=compact)
+        if $KAFKA_TOPICS --bootstrap-server "$BOOTSTRAP_SERVERS" \
+            --create \
+            --topic "$topic" \
+            --partitions "$partitions" \
+            --replication-factor "$replication" \
+            --config "$config_args" 2>&1; then
+            echo "  Topic '$topic' created successfully"
+        else
+            echo "  Topic '$topic' already exists (skipping)"
+        fi
     else
-        # Topic might already exist, that's OK
-        echo "  Topic '$topic' already exists (skipping)"
+        # Create without config
+        if $KAFKA_TOPICS --bootstrap-server "$BOOTSTRAP_SERVERS" \
+            --create \
+            --topic "$topic" \
+            --partitions "$partitions" \
+            --replication-factor "$replication" 2>&1; then
+            echo "  Topic '$topic' created successfully"
+        else
+            echo "  Topic '$topic' already exists (skipping)"
+        fi
     fi
 }
 
 echo ""
-echo "=== Creating Stream Topics (Avro format) ==="
+echo "=== Creating Stream Topics (JSON format) ==="
 create_topic "calls.completed" 6 3
 create_topic "calls.fraud-alerts" 6 3
 create_topic "transcription.raw" 6 3
@@ -71,14 +84,9 @@ echo "=== Creating Stream Topic (JSON format) ==="
 create_topic "calls.dlq" 6 3
 
 echo ""
-echo "=== Creating Compacted Topics (Avro format) ==="
+echo "=== Creating Compacted Topics (JSON format) ==="
 create_topic "calls.metadata" 6 3 "cleanup.policy=compact"
 create_topic "customers.profile" 6 3 "cleanup.policy=compact"
-
-echo ""
-echo "=== Creating ksqlDB Output Topics (Avro format) ==="
-create_topic "calls.completed.agg" 6 3
-create_topic "calls.fraud-alerts.agg" 6 3
 
 echo ""
 echo "=== Creating DLQ Topic (JSON format) ==="

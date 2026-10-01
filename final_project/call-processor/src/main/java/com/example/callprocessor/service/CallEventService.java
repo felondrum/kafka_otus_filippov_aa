@@ -1,7 +1,7 @@
 package com.example.callprocessor.service;
 
-import com.example.callprocessor.avro.CallEvent;
 import com.example.callprocessor.dto.CallEventRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -10,6 +10,8 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -18,25 +20,19 @@ public class CallEventService {
 
     private static final Logger log = LoggerFactory.getLogger(CallEventService.class);
 
-    private final KafkaTemplate<String, CallEvent> kafkaTemplate;
-    private final TopicManager topicManager;
-    private final AvroRecordConverter avroRecordConverter;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObjectMapper objectMapper;
     private final String completedTopic;
     private final String metadataTopic;
-    private final String dlqTopic;
 
-    public CallEventService(KafkaTemplate<String, CallEvent> kafkaTemplate,
-                            TopicManager topicManager,
-                            AvroRecordConverter avroRecordConverter,
+    public CallEventService(KafkaTemplate<String, String> kafkaTemplate,
+                            ObjectMapper objectMapper,
                             @org.springframework.beans.factory.annotation.Value("${call-processor.topics.completed:calls.completed}") String completedTopic,
-                            @org.springframework.beans.factory.annotation.Value("${call-processor.topics.metadata:calls.metadata}") String metadataTopic,
-                            @org.springframework.beans.factory.annotation.Value("${call-processor.topics.dlq:calls.dlq}") String dlqTopic) {
+                            @org.springframework.beans.factory.annotation.Value("${call-processor.topics.metadata:calls.metadata}") String metadataTopic) {
         this.kafkaTemplate = kafkaTemplate;
-        this.topicManager = topicManager;
-        this.avroRecordConverter = avroRecordConverter;
+        this.objectMapper = objectMapper;
         this.completedTopic = completedTopic;
         this.metadataTopic = metadataTopic;
-        this.dlqTopic = dlqTopic;
     }
 
     @Retryable(
@@ -47,13 +43,25 @@ public class CallEventService {
     public void processCallEvent(CallEventRequest request, String correlationId) {
         log.info("Processing call event: callId={}, correlationId={}", request.getCallId(), correlationId);
 
-        // Convert DTO to Avro record for calls.completed
-        CallEvent completedRecord = avroRecordConverter.toCompletedRecord(request);
-        produceToTopic(completedRecord, completedTopic, request.getCallId(), correlationId);
+        // Convert to JSON for calls.completed
+        Map<String, Object> completedEvent = new java.util.HashMap<>();
+        completedEvent.put("callId", request.getCallId());
+        completedEvent.put("phone", request.getPhone());
+        completedEvent.put("duration", request.getDuration());
+        completedEvent.put("agentId", request.getAgentId());
+        completedEvent.put("npsScore", request.getNpsScore());
+        completedEvent.put("status", "COMPLETED");
+        completedEvent.put("timestamp", Instant.now().toString());
 
-        // Convert DTO to Avro record for calls.metadata (with PENDING status)
-        CallEvent metadataRecord = avroRecordConverter.toMetadataRecord(request);
-        produceToTopic(metadataRecord, metadataTopic, request.getCallId(), correlationId);
+        produceToTopic(completedEvent, completedTopic, request.getCallId(), correlationId);
+
+        // Convert to JSON for calls.metadata (with PENDING status)
+        Map<String, Object> metadataEvent = new java.util.HashMap<>();
+        metadataEvent.put("callId", request.getCallId());
+        metadataEvent.put("status", "PENDING");
+        metadataEvent.put("timestamp", Instant.now().toEpochMilli());
+
+        produceToTopic(metadataEvent, metadataTopic, request.getCallId(), correlationId);
 
         log.info("Call event processed successfully: callId={}, correlationId={}", request.getCallId(), correlationId);
     }
@@ -63,28 +71,20 @@ public class CallEventService {
             maxAttemptsExpression = "${call-processor.retry.max-attempts:3}",
             backoff = @Backoff(delayExpression = "${call-processor.retry.backoff-delay:1000}", multiplier = 2)
     )
-    public void produceToTopic(CallEvent event, String topic, String key, String correlationId) {
+    public void produceToTopic(Map<String, Object> event, String topic, String key, String correlationId) {
         log.info("Producing event to topic={}, callId={}, correlationId={}", topic, key, correlationId);
 
-        CompletableFuture<SendResult<String, CallEvent>> future = kafkaTemplate.send(topic, key, event);
-
-        future.whenComplete((result, ex) -> {
-            if (ex != null) {
-                log.error("Failed to produce event to topic={}, callId={}, correlationId={}: {}",
-                        topic, key, correlationId, ex.getMessage());
-                throw new RuntimeException("Failed to produce event to " + topic, ex);
-            } else {
-                log.info("Event produced successfully to topic={}, partition={}, offset={}",
-                        topic, result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
-            }
-        });
-
         try {
-            future.get(10, TimeUnit.SECONDS);
+            String json = objectMapper.writeValueAsString(event);
+            CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(topic, key, json);
+            SendResult<String, String> result = future.get(10, TimeUnit.SECONDS);
+
+            log.info("Event produced successfully to topic={}, partition={}, offset={}",
+                    topic, result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
         } catch (Exception e) {
-            log.error("Error waiting for produce result: topic={}, callId={}, correlationId={}: {}",
+            log.error("Failed to produce event to topic={}, callId={}, correlationId={}: {}",
                     topic, key, correlationId, e.getMessage());
-            throw new RuntimeException("Error producing event", e);
+            throw new RuntimeException("Failed to produce event to " + topic, e);
         }
     }
 

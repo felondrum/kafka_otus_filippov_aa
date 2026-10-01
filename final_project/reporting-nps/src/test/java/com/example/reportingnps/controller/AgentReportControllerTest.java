@@ -5,11 +5,10 @@ import com.example.reportingnps.service.AgentReportService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.bean.MockBean;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.Map;
-
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -27,7 +26,7 @@ class AgentReportControllerTest {
     void shouldReturnAgentReport() throws Exception {
         // Given
         AgentReportResponse response = new AgentReportResponse(
-                "agent-001", 100, 0.85, Map.of(), Map.of(), 5, true
+                "agent-001", 100, 0.85, java.util.Map.of(), java.util.Map.of(), 5, true
         );
 
         when(agentReportService.getAgentReport("agent-001")).thenReturn(response);
@@ -44,7 +43,7 @@ class AgentReportControllerTest {
     void shouldReturn404WhenAgentNotFound() throws Exception {
         // Given
         AgentReportResponse response = new AgentReportResponse(
-                "agent-999", 0, 0.0, Map.of(), Map.of(), 0, false
+                "agent-999", 0, 0.0, java.util.Map.of(), java.util.Map.of(), 0, false
         );
 
         when(agentReportService.getAgentReport("agent-999")).thenReturn(response);

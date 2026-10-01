@@ -1,4 +1,4 @@
-.PHONY: deploy health logs stop clean restart deploy-core deploy-monitoring deploy-load-test
+.PHONY: deploy health logs stop clean restart deploy-core deploy-monitoring deploy-load-test e2e-setup e2e-verify e2e e2e-cleanup kafka-connect-e2e
 
 # Default profile
 PROFILE ?= full
@@ -99,3 +99,49 @@ status:
 	@echo ""
 	@echo "=== Kafka Topics ==="
 	@docker exec kafka-1 /usr/bin/kafka-topics --bootstrap-server kafka-1:9092 --list 2>/dev/null || echo "Kafka not ready yet"
+
+# E2E: Full end-to-end setup and verification
+e2e-setup:
+	@echo "=========================================="
+	@echo "E2E Setup - Deploying and initializing"
+	@echo "=========================================="
+	@make deploy
+	@echo ""
+	@echo "Waiting for services to be healthy..."
+	@sleep 45
+	@make health
+	@echo ""
+	@echo "Initializing Kafka topics..."
+	@make init-topics
+	@echo ""
+	@echo "Waiting for Kafka Connect to be ready..."
+	@sleep 15
+	@echo ""
+	@echo "E2E setup complete!"
+	@echo "Run 'make e2e-verify' to run bootstrap tests."
+
+e2e-verify:
+	@echo "=========================================="
+	@echo "E2E Verify - Running bootstrap tests"
+	@echo "=========================================="
+	@chmod +x ./infrastructure/e2e-bootstrap.sh
+	@./infrastructure/e2e-bootstrap.sh
+
+e2e: e2e-setup e2e-verify
+	@echo ""
+	@echo "=========================================="
+	@echo "E2E Complete!"
+	@echo "=========================================="
+
+e2e-cleanup:
+	@echo "Cleaning up E2E environment..."
+	docker compose --profile full down -v
+	@echo "Cleanup complete."
+
+# Kafka Connect JDBC Sink E2E Tests
+kafka-connect-e2e:
+	@echo "=========================================="
+	@echo "Kafka Connect JDBC Sink E2E Test Suite"
+	@echo "=========================================="
+	@chmod +x ./infrastructure/kafka-connect-e2e-test.sh
+	@./infrastructure/kafka-connect-e2e-test.sh

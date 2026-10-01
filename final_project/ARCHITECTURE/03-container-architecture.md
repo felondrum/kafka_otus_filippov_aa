@@ -48,6 +48,15 @@
 │  │  Grafana        │    │  Kafdrop        │    │  ksqlDB         │        │
 │  │  :3000          │    │  :9000          │    │  :8088          │        │
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘        │
+│  ┌─────────────────┐                                                        │
+│  │  ksqlDB-init    │                                                        │
+│  │  (init script)  │                                                        │
+│  └─────────────────┘                                                        │
+│                                                                              │
+│  ┌─────────────────┐                                                        │
+│  │  Kafka Connect  │                                                        │
+│  │  :8086          │                                                        │
+│  └─────────────────┘                                                        │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -70,12 +79,14 @@
 | **Kafka 1** | `confluentinc/cp-kafka:latest` | Брокер Kafka (KRaft, controller) | 9092, 9093 |
 | **Kafka 2** | `confluentinc/cp-kafka:latest` | Брокер Kafka (controller) | 9092, 9093 |
 | **Kafka 3** | `confluentinc/cp-kafka:latest` | Брокер Kafka | 9092, 9093 |
-| **Schema Registry** | `confluentinc/cp-schema-registry:latest` | Хранение Avro-схем | 8085 |
+| **Schema Registry** | `confluentinc/cp-schema-registry:7.6.1` | Хранение JSON-схем | 8085 |
+| **Kafka Connect** | `confluentinc/cp-kafka-connect:latest` | JDBC Sink connector для PostgreSQL | 8086 |
 | **PostgreSQL** | `postgres:15-alpine` | Аналитическое хранилище | 5432 |
 | **Prometheus** | `prom/prometheus:latest` | Сбор метрик | 9090 |
 | **Grafana** | `grafana/grafana:latest` | Визуализация | 3000 |
 | **Kafdrop** | `obsidiandynamics/kafdrop:latest` | UI для Kafka | 9000 |
-| **ksqlDB** | `confluentinc/cp-ksqldb-server:latest` | SQL-обработка потоков + REST API | 8088 |
+| **ksqlDB** | `confluentinc/cp-ksqldb-server:7.6.1` | SQL-обработка потоков + REST API | 8088 |
+| **ksqlDB-init** | `confluentinc/cp-kafka:7.6.1` | Инициализация streams и tables (автоматический запуск) | — |
 
 ## 3.4. Связи между контейнерами
 
@@ -98,13 +109,32 @@ Grafana ──[HTTP API]──▶ Prometheus
 
 Kafdrop ──[Kafka API]──▶ Kafka Cluster
 
-ksqlDB ──[Kafka SASL]──▶ Kafka Cluster
-ksqlDB ──[HTTP]──▶ Schema Registry (Avro schema resolution)
+ksqlDB ──[Kafka PLAINTEXT]──▶ Kafka Cluster (internal:9092)
+ksqlDB ──[HTTP]──▶ Schema Registry (JSON schema resolution)
+ksqlDB-init ──[HTTP]──▶ ksqlDB (REST API) — creates streams & tables on startup
+
+Kafka Connect ──[Kafka SASL]──▶ Kafka Cluster
+Kafka Connect ──[HTTP]──▶ Schema Registry (JSON schema resolution)
+Kafka Connect ──[JDBC]──▶ PostgreSQL
 ```
 
-## 3.5. Сетевая модель
+## 3.5. Автоматическая инициализация ksqlDB
+
+При запуске `docker compose --profile full up -d` автоматически выполняется:
+
+1. **ksqldb-server** запускается и ожидает подключения к Kafka
+2. **ksqldb-init** (batch job) запускается после старта ksqldb-server:
+   - Создаёт external streams для `calls.completed` и `calls.fraud-alerts`
+   - Создаёт persistent tables для агрегации:
+     - `calls_completed_agg` — TUMBLING window 5min, GROUP BY agentId
+     - `fraud_alerts_filtered` — GROUP BY phone
+   - Проверяет статус всех queries (должны быть RUNNING)
+
+Скрипт инициализации: `infrastructure/kafka/ksqldb-init.sh`
+
+## 3.6. Сетевая модель
 
 - **Docker Network:** `call-platform-net` (bridge)
 - Все контейнеры подключены к единой сети
-- Порты сервисов (8081-8084) доступны только внутри сети
+- Порты сервисов (8081-8084, 8088) доступны только внутри сети
 - Для локального доступа: маппинг портов на `localhost` через docker-compose
