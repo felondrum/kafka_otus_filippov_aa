@@ -549,20 +549,20 @@ private Map<String, Object> buildConfluentJson(Map<String, Object> payload) {
 
 ---
 
-## 6. Dual-Write Pattern (Kafka + PostgreSQL)
+## 6. Kafka-first Write Pattern (transcription-analyzer)
 
 ### 6.1 Что это
 
-Dual-Write — pattern, при котором данные пишутся одновременно в Kafka и PostgreSQL. Kafka — system of record, PostgreSQL — downstream consumer.
+Kafka-first Write — pattern, при котором данные пишутся только в Kafka, а PostgreSQL заполняется через Kafka Connect JDBC Sink. DLQ используется при неудаче записи в Kafka.
 
-### 6.2 Реализация (transcription-analyzer)
+### 6.2 Реализация (DualWriter.java)
 
 ```text
 // DualWriter.java
 public void write(Map<String, Object> enriched) {
     String callId = (String) enriched.get("call_id");
     
-    // Step 1: Write to Kafka FIRST (blocking)
+    // Step 1: Write to Kafka ONLY (blocking)
     Map<String, Object> confluentJson = buildConfluentJson(enriched);
     String json = objectMapper.writeValueAsString(confluentJson);
     CompletableFuture<SendResult<String, String>> future = 
@@ -572,22 +572,13 @@ public void write(Map<String, Object> enriched) {
         future.get(10, TimeUnit.SECONDS);  // Block until ack
     } catch (Exception e) {
         log.error("Kafka write failed for callId: {}", callId, e);
-        return;  // Stop if Kafka fails
+        // Step 2: Send to DLQ on failure
+        sendToDLQ(enriched, callId);
+        return;
     }
     
-    // Step 2: Write to PostgreSQL with retry
-    for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-            jdbcTemplate.update(
-                "INSERT INTO call_transcriptions (call_id, status, ...) VALUES (?, ?, ...)",
-                callId, enriched.get("status"), ...
-            );
-            return;  // Success
-        } catch (Exception e) {
-            if (attempt == MAX_RETRIES) throw e;
-            Thread.sleep(INITIAL_BACKOFF_MS * (long) Math.pow(2, attempt - 1));
-        }
-    }
+    // Step 3: PostgreSQL populated by Kafka Connect JDBC Sink (async, not from this service)
+    // Kafka Connect reads from transcription.enriched and writes to call_transcriptions
 }
 ```
 
@@ -596,11 +587,11 @@ public void write(Map<String, Object> enriched) {
 ```
 1. Enriched transcription ready
 2. Write to Kafka (transcription.enriched) ← System of Record
-3. Kafka Connect JDBC Sink reads from Kafka
-4. Write to PostgreSQL (call_transcriptions) ← Downstream
+3a. On Kafka success: Kafka Connect JDBC Sink reads → PostgreSQL (async)
+3b. On Kafka failure: Send to transcription.enriched.dlq
 ```
 
-**Почему Kafka сначала?** Если PostgreSQL fails, Kafka всё ещё содержит данные — Kafka Connect retry'ет. Если PostgreSQL сначала — Kafka может потерять данные при crash.
+**Почему только Kafka?** Исключает race condition и дублирование записей в PostgreSQL. Kafka Connect JDBC Sink надёжнее прямого JDBC из сервиса.
 
 ---
 

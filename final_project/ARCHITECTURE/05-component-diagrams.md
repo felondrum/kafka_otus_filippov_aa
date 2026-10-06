@@ -278,15 +278,19 @@ Spring Boot Actuator: GET /actuator/health
 │  ┌───────────────────────────┼─────────────────────────────┐ │
 │  │                           ▼                             │ │
 │  │              ┌────────────────────────┐                  │ │
-│  │              │  dual-write strategy   │                  │ │
+│  │              │  Kafka-first write     │                  │ │
 │  │              │                        │                  │ │
 │  │              │  ├─[Kafka]──▶          │                  │ │
 │  │              │  │  transcription.      │                  │ │
 │  │              │  │  enriched            │                  │ │
 │  │              │  │                      │                  │ │
-│  │              │  └─[JDBC]──▶           │                  │ │
-│  │              │     PostgreSQL          │                  │ │
-│  │              │     call_transcriptions │                  │ │
+│  │              │  └─[DLQ]──▶            │                  │ │
+│  │              │     transcription.      │                  │ │
+│  │              │     enriched.dlq        │                  │ │
+│  │              │                      │                  │ │
+│  │              │  PostgreSQL: через     │                  │ │
+│  │              │  Kafka Connect JDBC    │                  │ │
+│  │              │  Sink (не напрямую)    │                  │ │
 │  │              └────────────────────────┘                  │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                                                               │
@@ -315,7 +319,7 @@ Spring Boot Actuator: GET /actuator/health
 | **SummaryGenerator** | Keyword-based heuristic: извлечение problem/solution/sentiment/urgency/confidence |
 | **CustomerProfileManager** | Broadcast enrichment — in-memory `ConcurrentHashMap<String, Map<String, String>>` |
 | **EnrichmentService** | Обогащение summary с segment/riskLevel/priority из CustomerProfileManager |
-| **DualWriter** | Kafka-first write: сначала `transcription.enriched`, потом PostgreSQL с retry (3 attempts, 1s→2s→4s), DLQ при неудаче |
+| **DualWriter** | Kafka-first write: сначала `transcription.enriched` в Kafka, DLQ при неудаче, PostgreSQL через Kafka Connect JDBC Sink |
 | **MetadataManager** | Status lifecycle: PENDING → TRANSCRIBING → SUMMARIZING → COMPLETED |
 
 **SummaryGenerator.java (keyword-based):**
@@ -429,8 +433,9 @@ Spring Boot Actuator: GET /actuator/health
 | Компонент | Описание |
 |-----------|----------|
 | **MetadataConsumer** | `@KafkaListener` на `calls.metadata`, `AckMode.MANUAL` — обновляет PostgreSQL call_metadata |
-| **EnrichedTranscriptionConsumer** | `@KafkaListener` на `transcription.enriched`, `AckMode.MANUAL` — writes to call_transcriptions, orphan buffering |
+| **EnrichedTranscriptionConsumer** | `@KafkaListener` на `transcription.enriched`, `AckMode.MANUAL`, **cache invalidation only** (данные в PG через Kafka Connect JDBC Sink), orphan buffering |
 | **FraudAlertConsumer** | `@KafkaListener` на `calls.fraud-alerts`, `AckMode.MANUAL` — aggregates fraud stats, correlates with call metadata |
+| **CompletedEventConsumer** | `@KafkaListener` на `calls.completed`, `AckMode.MANUAL` — enriches metadata с agentId/duration/NPS |
 | **ReportController** | `GET /api/reports/daily` (with from/to params) — daily reports with caching |
 | **AgentReportController** | `GET /api/reports/agent/{id}` — per-agent performance |
 | **SentimentController** | `GET /api/sentiment/distribution` — sentiment distribution |

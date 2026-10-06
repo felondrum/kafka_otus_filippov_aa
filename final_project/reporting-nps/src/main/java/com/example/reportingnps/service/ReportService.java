@@ -2,6 +2,7 @@ package com.example.reportingnps.service;
 
 import com.example.reportingnps.dto.DailyReportResponse;
 import com.example.reportingnps.repository.CallMetadataRepository;
+import com.example.reportingnps.repository.CallTranscriptionRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -14,9 +15,12 @@ import java.util.stream.Collectors;
 public class ReportService {
 
     private final CallMetadataRepository callMetadataRepository;
+    private final CallTranscriptionRepository callTranscriptionRepository;
 
-    public ReportService(CallMetadataRepository callMetadataRepository) {
+    public ReportService(CallMetadataRepository callMetadataRepository,
+                         CallTranscriptionRepository callTranscriptionRepository) {
         this.callMetadataRepository = callMetadataRepository;
+        this.callTranscriptionRepository = callTranscriptionRepository;
     }
 
     @Cacheable(value = "reportCache", key = "'daily:' + #from + ':' + #to")
@@ -32,16 +36,22 @@ public class ReportService {
                         s -> callMetadataRepository.countByCallStatus(s.getValue())
                 ));
 
-        // Calls by segment
+        // Calls by segment (from call_transcriptions where segment data is available)
         Map<String, Long> callsBySegment = new HashMap<>();
-        callMetadataRepository.countBySegmentBetween(from, to).forEach(row -> {
-            callsBySegment.put((String) row[0], (Long) row[1]);
+        callTranscriptionRepository.countBySegmentBetween(from, to).forEach(row -> {
+            String segment = (String) row[0];
+            if (segment != null) {
+                callsBySegment.put(segment, (Long) row[1]);
+            }
         });
 
-        // Calls by agent
+        // Calls by agent (filter out null keys)
         Map<String, Long> callsByAgent = new HashMap<>();
         callMetadataRepository.countByAgentIdBetween(from, to).forEach(row -> {
-            callsByAgent.put((String) row[0], (Long) row[1]);
+            String agentId = (String) row[0];
+            if (agentId != null) {
+                callsByAgent.put(agentId, (Long) row[1]);
+            }
         });
 
         return new DailyReportResponse(totalCalls, averageNps, callsByStatus, callsBySegment, callsByAgent);

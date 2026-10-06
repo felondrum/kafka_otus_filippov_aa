@@ -40,6 +40,9 @@ dependencies {
     // Micrometer & Prometheus
     implementation("io.micrometer:micrometer-registry-prometheus")
 
+    // Swagger UI / OpenAPI
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0")
+
     // Jackson
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")

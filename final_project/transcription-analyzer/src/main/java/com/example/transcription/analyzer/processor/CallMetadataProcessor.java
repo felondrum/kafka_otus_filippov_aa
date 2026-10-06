@@ -52,8 +52,9 @@ public class CallMetadataProcessor {
      * @param callId unique call identifier
      * @param durationMinutes call duration in minutes
      * @param phone customer phone number (for profile lookup)
+     * @param agentId agent identifier
      */
-    public void processCall(String callId, double durationMinutes, String phone) {
+    public void processCall(String callId, double durationMinutes, String phone, String agentId) {
         log.info("Processing call: callId={}, duration={}min, phone={}", callId, durationMinutes, phone);
 
         // Generate a consistent UUID for this call (PostgreSQL requires UUID type)
@@ -63,6 +64,9 @@ public class CallMetadataProcessor {
         }
 
         try {
+            // Step 0: Initialize call_metadata with real phone/agentId/duration
+            metadataManager.initialize(resolvedCallId, phone, agentId, durationMinutes);
+
             // Step 1: Produce raw transcription and set TRANSCRIBING status
             metadataManager.onTranscriptionProduced(resolvedCallId);
             Map<String, Object> rawTranscription = transcriptionProducer.produce(callId, durationMinutes);
@@ -99,7 +103,7 @@ public class CallMetadataProcessor {
                     phone
             );
 
-            // Step 5: Dual-write (Kafka + PostgreSQL)
+            // Step 5: Write enriched data to Kafka (PostgreSQL is populated by Kafka Connect JDBC Sink)
             dualWriter.write(enriched);
 
             // Step 6: Set COMPLETED status

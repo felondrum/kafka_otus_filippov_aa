@@ -41,7 +41,7 @@
 |--------|------|------|
 | **call-processor** | 8081 | REST API entry point, Kafka Producer, Topic Manager |
 | **fraud-detector** | 8082 | Kafka Streams, детекция фрода в реальном времени |
-| **transcription-analyzer** | 8083 | Synthetic transcription, summary generation, dual-write |
+| **transcription-analyzer** | 8083 | Synthetic transcription, summary generation, Kafka-first write + DLQ |
 | **reporting-nps** | 8084 | Kafka consumers, REST API для отчётов, CQRS read side |
 | **load-simulator** | 8087 | Генератор синтетической нагрузки, 4 fraud-сценария |
 
@@ -236,7 +236,7 @@ cache.max.bytes.buffering = 10485760 (10 MB)
 | `SummaryGenerator.java` | Keyword-based heuristic: problem/solution/sentiment/urgency/confidence |
 | `CustomerProfileManager.java` | Broadcast enrichment — in-memory `ConcurrentHashMap<String, Map<String, String>>` |
 | `EnrichmentService.java` | Обогащение summary с segment/riskLevel/priority из CustomerProfileManager |
-| `DualWriter.java` | Kafka-first write → PostgreSQL с retry (3 attempts) → DLQ при неудаче |
+| `DualWriter.java` | Kafka-first write → DLQ при неудаче, PostgreSQL через Kafka Connect JDBC Sink |
 | `MetadataManager.java` | Status lifecycle: PENDING → TRANSCRIBING → SUMMARIZING → COMPLETED |
 
 ### Synthetic Transcription (TranscriptionProducer.java)
@@ -267,12 +267,12 @@ Keyword-based heuristic, **без LLM**:
 - `CustomerProfileManager` хранит профили в `ConcurrentHashMap<String, Map<String, String>>`.
 - **Не KTable join** — broadcast pattern из-за key mismatch (summary key=callId, profile key=phone).
 
-### Dual-Write Strategy (DualWriter.java)
+### Kafka-first Write Strategy (DualWriter.java)
 
 Порядок записи:
 1. **Kafka:** produce to `transcription.enriched` в Confluent JSON format (`{"schema": {...}, "payload": {...}}`).
-2. **PostgreSQL:** INSERT into `call_transcriptions` с retry (3 attempts, 1s→2s→4s).
-3. **DLQ:** если PostgreSQL failed после всех retry → `transcription.enriched.dlq`.
+2. **DLQ:** если Kafka failed → `transcription.enriched.dlq`.
+3. **PostgreSQL:** данные попадают через Kafka Connect JDBC Sink (не напрямую из сервиса).
 4. **Metadata:** `INSERT ... ON CONFLICT DO NOTHING` для call_metadata record.
 
 ---
@@ -280,15 +280,16 @@ Keyword-based heuristic, **без LLM**:
 ## 8. Детали реализации: reporting-nps
 
 ### Роль
-CQRS read side. Потребляет события из 3 Kafka topics, хранит в PostgreSQL, предоставляет REST API для аналитики.
+CQRS read side. Потребляет события из 4 Kafka topics, хранит в PostgreSQL, предоставляет REST API для аналитики.
 
 ### Ключевые классы
 
 | Класс | Роль |
 |-------|------|
 | `MetadataConsumer.java` | `@KafkaListener` на `calls.metadata`, `AckMode.MANUAL` |
-| `EnrichedTranscriptionConsumer.java` | `@KafkaListener` на `transcription.enriched`, `AckMode.MANUAL`, orphan buffering |
+| `EnrichedTranscriptionConsumer.java` | `@KafkaListener` на `transcription.enriched`, `AckMode.MANUAL`, cache invalidation only (data via Kafka Connect) |
 | `FraudAlertConsumer.java` | `@KafkaListener` на `calls.fraud-alerts`, `AckMode.MANUAL`, correlates with call metadata |
+| `CompletedEventConsumer.java` | `@KafkaListener` на `calls.completed`, `AckMode.MANUAL`, enriches metadata with agentId/duration/NPS |
 | `ReportController.java` | `GET /api/reports/daily` (with from/to params) |
 | `AgentReportController.java` | `GET /api/reports/agent/{id}` |
 | `SentimentController.java` | `GET /api/sentiment/distribution` |
@@ -507,16 +508,17 @@ fraudCalls = totalCalls × fraudPercent / 100
 
 **Impact:** Качество суммаризации ниже, чем у LLM, но система работает автономно и детерминированно.
 
-### 5. Dual-Write (Kafka + PostgreSQL)
+### 5. Kafka-first Write (transcription-analyzer)
 
-**Decision:** transcription-analyzer пишет enriched events одновременно в Kafka и PostgreSQL.
+**Decision:** transcription-analyzer пишет enriched events только в Kafka, PostgreSQL заполняется через Kafka Connect JDBC Sink.
 
 **Rationale:**
 - Kafka как primary event source — для downstream consumers (reporting-nps, Kafka Connect).
-- PostgreSQL как analytics store — для REST API reporting-nps.
-- Retry с exponential backoff + DLQ при неудаче.
+- PostgreSQL как analytics store — заполняется автоматически через Kafka Connect JDBC Sink.
+- DLQ при неудаче записи в Kafka.
+- Исключает race condition и дублирование записей в PostgreSQL.
 
-**Impact:** Risk race condition между Kafka и PostgreSQL write. Kafka Connect JDBC Sink также читает из `transcription.enriched` — potential duplicate write to PostgreSQL.
+**Impact:** reporting-nps получает данные из PostgreSQL (Kafka Connect) + cache invalidation через `transcription.enriched` topic.
 
 ### 6. CQRS с Manual Acknowledgment
 
@@ -677,7 +679,7 @@ make e2e
 - ✅ Real-time fraud detection (3 patterns: frequent calls, anomalous duration, NPS escalation)
 - ✅ Synthetic transcription + keyword-based summary generation
 - ✅ Broadcast enrichment with customer profiles
-- ✅ Dual-write strategy (Kafka + PostgreSQL with retry + DLQ)
+- ✅ Kafka-first write strategy (Kafka + DLQ fallback, PostgreSQL via Kafka Connect JDBC Sink)
 - ✅ CQRS read side with REST API for analytics
 - ✅ Kafka Connect JDBC Sink for automated PostgreSQL sync
 - ✅ ksqlDB analytics layer (TUMBLING windows, GROUP BY aggregation)
@@ -692,7 +694,7 @@ make e2e
 - **Event-Driven Architecture** — choreography pattern через Kafka events
 - **CQRS** — write path (Kafka) ≠ read path (PostgreSQL)
 - **Broadcast Enrichment** — in-memory map для lookup (key mismatch solution)
-- **Dual-Write** — Kafka-first strategy с retry и DLQ
+- **Kafka-first Write** — Kafka-only from service, PostgreSQL via Kafka Connect JDBC Sink, DLQ on failure
 - **Stateful Processing** — Kafka Streams + RocksDB State Store
 - **Manual Acknowledgment** — at_least_once с гарантией не-потери сообщений
 - **Keyword-based Heuristic** — детерминированная логика без внешних зависимостей

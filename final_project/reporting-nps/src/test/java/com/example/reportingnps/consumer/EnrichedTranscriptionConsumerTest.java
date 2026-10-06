@@ -1,9 +1,5 @@
 package com.example.reportingnps.consumer;
 
-import com.example.reportingnps.entity.CallMetadata;
-import com.example.reportingnps.entity.CallTranscription;
-import com.example.reportingnps.repository.CallMetadataRepository;
-import com.example.reportingnps.repository.CallTranscriptionRepository;
 import com.example.reportingnps.service.ReportService;
 import com.example.reportingnps.service.SentimentService;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,23 +9,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import org.springframework.kafka.support.Acknowledgment;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class EnrichedTranscriptionConsumerTest {
-
-    @Mock
-    private CallTranscriptionRepository transcriptionRepository;
-
-    @Mock
-    private CallMetadataRepository metadataRepository;
 
     @Mock
     private ReportService reportService;
@@ -37,62 +23,73 @@ class EnrichedTranscriptionConsumerTest {
     @Mock
     private SentimentService sentimentService;
 
+    @Mock
+    private Acknowledgment ack;
+
     @InjectMocks
     private EnrichedTranscriptionConsumer consumer;
 
-    private UUID testCallId;
-
-    @BeforeEach
-    void setUp() {
-        testCallId = UUID.randomUUID();
-    }
-
     @Test
-    void shouldConsumeAndSaveTranscription() {
+    void shouldInvalidateCachesOnValidEvent() {
         // Given
-        CallMetadata metadata = new CallMetadata();
-        metadata.setCallId(testCallId);
-        metadata.setAgentId("agent-001");
-
-        when(metadataRepository.findByCallId(testCallId)).thenReturn(Optional.of(metadata));
-        when(transcriptionRepository.findByCallId(testCallId)).thenReturn(Optional.empty());
-        when(transcriptionRepository.save(any(CallTranscription.class))).thenReturn(new CallTranscription());
+        String callId = "550e8400-e29b-41d4-a716-446655440000";
+        String jsonEvent = String.format(
+                "{\"payload\":{\"callId\":\"%s\",\"transcriptionText\":\"Hello\",\"sentiment\":\"POSITIVE\"}}",
+                callId
+        );
 
         // When
-        consumer.consume(Map.of(
-                "callId", testCallId.toString(),
-                "transcriptionText", "Hello, how can I help you?",
-                "sentiment", "POSITIVE",
-                "segment", "PREMIUM",
-                "riskLevel", "LOW",
-                "priority", "NORMAL"
-        ), null);
+        consumer.consume(jsonEvent, ack);
 
         // Then
-        ArgumentCaptor<CallTranscription> captor = ArgumentCaptor.forClass(CallTranscription.class);
-        verify(transcriptionRepository, times(1)).save(captor.capture());
-
-        CallTranscription saved = captor.getValue();
-        assertThat(saved.getCallId()).isEqualTo(testCallId);
-        assertThat(saved.getTranscriptionText()).isEqualTo("Hello, how can I help you?");
-        assertThat(saved.getSentiment()).isEqualTo("POSITIVE");
-        assertThat(saved.getSegment()).isEqualTo("PREMIUM");
-        assertThat(saved.getRiskLevel()).isEqualTo("LOW");
+        verify(reportService, times(1)).evictMetadataCache(callId);
+        verify(reportService, times(1)).evictReportCache();
+        verify(sentimentService, times(1)).evictSentimentCache();
+        verify(ack, times(1)).acknowledge();
     }
 
     @Test
-    void shouldBufferOrphanEvent() {
-        // Given - callId not found in metadata
-        when(metadataRepository.findByCallId(testCallId)).thenReturn(Optional.empty());
+    void shouldSkipEventWithoutCallId() {
+        // Given
+        String jsonEvent = "{\"payload\":{\"transcriptionText\":\"Hello\"}}";
 
         // When
-        consumer.consume(Map.of(
-                "callId", testCallId.toString(),
-                "transcriptionText", "Test transcription"
-        ), null);
+        consumer.consume(jsonEvent, ack);
 
-        // Then - orphan event should be buffered
-        assertThat(consumer).isNotNull();
-        verify(transcriptionRepository, never()).save(any());
+        // Then
+        verify(reportService, never()).evictMetadataCache(anyString());
+        verify(ack, times(1)).acknowledge();
+    }
+
+    @Test
+    void shouldSkipEventWithInvalidCallId() {
+        // Given
+        String jsonEvent = "{\"payload\":{\"callId\":\"not-a-uuid\",\"transcriptionText\":\"Hello\"}}";
+
+        // When
+        consumer.consume(jsonEvent, ack);
+
+        // Then
+        verify(reportService, never()).evictMetadataCache(anyString());
+        verify(ack, times(1)).acknowledge();
+    }
+
+    @Test
+    void shouldHandlePlainJsonWithoutPayloadWrapper() {
+        // Given
+        String callId = "550e8400-e29b-41d4-a716-446655440001";
+        String jsonEvent = String.format(
+                "{\"callId\":\"%s\",\"sentiment\":\"NEGATIVE\"}",
+                callId
+        );
+
+        // When
+        consumer.consume(jsonEvent, ack);
+
+        // Then
+        verify(reportService, times(1)).evictMetadataCache(callId);
+        verify(reportService, times(1)).evictReportCache();
+        verify(sentimentService, times(1)).evictSentimentCache();
+        verify(ack, times(1)).acknowledge();
     }
 }

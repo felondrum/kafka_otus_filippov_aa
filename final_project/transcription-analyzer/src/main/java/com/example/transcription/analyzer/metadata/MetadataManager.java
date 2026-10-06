@@ -37,17 +37,36 @@ public class MetadataManager {
      * Expected sequence: TRANSCRIBING -> SUMMARIZING -> COMPLETED
      */
     public void transition(String callId, String status) {
+        transition(callId, null, null, null, status);
+    }
+
+    /**
+     * Initialize call_metadata record with all fields, or update status if record exists.
+     */
+    public void transition(String callId, String phone, String agentId, Double callDurationMinutes, String status) {
         // Ensure callId is a valid UUID (PostgreSQL call_metadata requires UUID type)
         String uuidCallId = ensureValidUuid(callId);
 
         // 1. Insert/update call_metadata in PostgreSQL
         try {
-            jdbcTemplate.update(
-                    "INSERT INTO call_metadata (call_id, customer_phone, agent_id, call_start_time, call_status, status) " +
-                    "VALUES (?, '+79991234567', 'agent-test', NOW(), 'COMPLETED', ?) " +
-                    "ON CONFLICT (call_id) DO UPDATE SET status = ?, updated_at = CURRENT_TIMESTAMP",
-                    UUID.fromString(uuidCallId), status, status
-            );
+            if (phone != null && agentId != null) {
+                // Initial insert with all fields
+                jdbcTemplate.update(
+                        "INSERT INTO call_metadata (call_id, customer_phone, agent_id, call_start_time, call_duration, call_status) " +
+                        "VALUES (?, ?, ?, NOW(), ?, 'COMPLETED') " +
+                        "ON CONFLICT (call_id) DO UPDATE SET " +
+                        "updated_at = CURRENT_TIMESTAMP",
+                        UUID.fromString(uuidCallId), phone, agentId,
+                        callDurationMinutes != null ? (int) Math.round(callDurationMinutes * 60) : null
+                );
+            } else {
+                // Status-only update — record must already exist (created by initialize())
+                jdbcTemplate.update(
+                        "UPDATE call_metadata SET call_status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP " +
+                        "WHERE call_id = ?",
+                        UUID.fromString(uuidCallId)
+                );
+            }
         } catch (Exception e) {
             log.warn("Failed to update call_metadata for callId={}: {}", callId, e.getMessage());
         }
@@ -92,6 +111,13 @@ public class MetadataManager {
 
     public void onDualWriteComplete(String callId) {
         transition(callId, STATUS_COMPLETED);
+    }
+
+    /**
+     * Initialize call_metadata with full data.
+     */
+    public void initialize(String callId, String phone, String agentId, Double callDurationMinutes) {
+        transition(callId, phone, agentId, callDurationMinutes, STATUS_TRANSCRIBING);
     }
 
     /**

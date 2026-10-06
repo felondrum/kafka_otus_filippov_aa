@@ -63,12 +63,10 @@ public class MetadataConsumer {
                 callMetadataRepository.save(metadata);
                 log.info("Updated metadata status for callId={}, status={}", callId, status);
             } else {
-                // Create minimal metadata record - will be enriched later by enriched transcription
+                // Create minimal metadata record - will be enriched by CompletedEventConsumer from calls.completed
                 CallMetadata newMetadata = new CallMetadata();
                 newMetadata.setCallId(callId);
                 newMetadata.setCallStatus(status);
-                newMetadata.setAgentId("unknown");
-                newMetadata.setCustomerPhone("unknown");
                 newMetadata.setCallStartTime(LocalDateTime.now());
                 callMetadataRepository.save(newMetadata);
                 log.info("Created minimal metadata record for callId={}, status={}", callId, status);

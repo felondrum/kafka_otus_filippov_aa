@@ -16,15 +16,21 @@ public interface CallTranscriptionRepository extends JpaRepository<CallTranscrip
 
     Optional<CallTranscription> findByCallId(UUID callId);
 
-    @Query("SELECT ct.sentiment, COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment IS NOT NULL AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime BETWEEN :from AND :to) GROUP BY ct.sentiment")
+    @Query("SELECT LOWER(ct.sentiment), COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment IS NOT NULL AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime >= CURRENT_DATE) GROUP BY LOWER(ct.sentiment)")
     List<Object[]> countBySentimentBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
-    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment = 'POSITIVE' AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime BETWEEN :from AND :to)")
+    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE LOWER(ct.sentiment) = 'positive' AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime >= CURRENT_DATE)")
     long countPositiveBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
-    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment = 'NEUTRAL' AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime BETWEEN :from AND :to)")
+    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE LOWER(ct.sentiment) = 'neutral' AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime >= CURRENT_DATE)")
     long countNeutralBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
-    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE ct.sentiment = 'NEGATIVE' AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime BETWEEN :from AND :to)")
+    @Query("SELECT COUNT(ct) FROM CallTranscription ct WHERE LOWER(ct.sentiment) = 'negative' AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime >= CURRENT_DATE)")
     long countNegativeBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query("SELECT ct.segment, COUNT(ct) FROM CallTranscription ct WHERE ct.segment IS NOT NULL AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.callStartTime >= CURRENT_DATE) GROUP BY ct.segment")
+    List<Object[]> countBySegmentBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query("SELECT ct.segment, COUNT(ct) FROM CallTranscription ct WHERE ct.segment IS NOT NULL AND ct.callId IN (SELECT cm.callId FROM CallMetadata cm WHERE cm.agentId = :agentId) GROUP BY ct.segment")
+    List<Object[]> countByAgentIdAndSegment(@Param("agentId") String agentId);
 }

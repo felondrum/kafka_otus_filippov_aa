@@ -2,6 +2,7 @@ package com.example.reportingnps.service;
 
 import com.example.reportingnps.dto.AgentReportResponse;
 import com.example.reportingnps.repository.CallMetadataRepository;
+import com.example.reportingnps.repository.CallTranscriptionRepository;
 import com.example.reportingnps.repository.FraudStatsRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -14,11 +15,14 @@ import java.util.stream.Collectors;
 public class AgentReportService {
 
     private final CallMetadataRepository callMetadataRepository;
+    private final CallTranscriptionRepository callTranscriptionRepository;
     private final FraudStatsRepository fraudStatsRepository;
 
     public AgentReportService(CallMetadataRepository callMetadataRepository,
+                              CallTranscriptionRepository callTranscriptionRepository,
                               FraudStatsRepository fraudStatsRepository) {
         this.callMetadataRepository = callMetadataRepository;
+        this.callTranscriptionRepository = callTranscriptionRepository;
         this.fraudStatsRepository = fraudStatsRepository;
     }
 
@@ -37,10 +41,16 @@ public class AgentReportService {
         Map<String, Long> callsByStatus = EnumSet.allOf(ReportService.CallMetadataStatus.class).stream()
                 .collect(Collectors.toMap(
                         s -> s.getValue(),
-                        s -> 0L // Would need agent-specific status counts
+                        s -> callMetadataRepository.countByAgentIdAndCallStatus(agentId, s.getValue())
                 ));
 
         Map<String, Long> callsBySegment = new HashMap<>();
+        callTranscriptionRepository.countByAgentIdAndSegment(agentId).forEach(row -> {
+            String segment = (String) row[0];
+            if (segment != null) {
+                callsBySegment.put(segment, (Long) row[1]);
+            }
+        });
 
         return new AgentReportResponse(agentId, totalCalls, 0.0, callsByStatus,
                 callsBySegment, fraudAlerts, true);

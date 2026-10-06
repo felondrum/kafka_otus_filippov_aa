@@ -20,7 +20,11 @@ The connector SHALL:
 - **WHEN** Kafka Connect JDBC Sink connector is deployed and configured
 - **THEN** connector reads events from `transcription.enriched` topic and writes to PostgreSQL `call_transcriptions` table
 
-... (rest of the file remains unchanged, just remove the DualWriter fallback scenario)
+... (rest of the file remains unchanged)
+
+### Requirement: Sole Writer Responsibility
+
+The Kafka Connect JDBC Sink connector is the **sole** writer for the `call_transcriptions` table. No application-level JDBC writes are used — the DualWriter component in transcription-analyzer only produces to Kafka, and the reporting-nps service is read-only.
 
 ### Requirement: Database User and Permissions
 

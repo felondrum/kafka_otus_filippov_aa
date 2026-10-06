@@ -14,7 +14,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -50,18 +49,22 @@ class FraudAlertConsumerTest {
     @Test
     void shouldConsumeAndAggregateFraudAlert() {
         // Given
+        String jsonEvent = String.format(
+                "{\"callId\":\"%s\",\"phone\":\"+1234567890\",\"pattern\":\"FREQUENT_CALLS\",\"severity\":\"HIGH\"}",
+                testCallId
+        );
+
         when(metadataRepository.findByCallId(testCallId)).thenReturn(Optional.empty());
         when(fraudStatsRepository.findByPhoneAndPatternAndSeverity("+1234567890", "FREQUENT_CALLS", "HIGH"))
                 .thenReturn(Optional.empty());
-        when(fraudStatsRepository.save(any(FraudStats.class))).thenReturn(new FraudStats());
+        when(fraudStatsRepository.save(any(FraudStats.class))).thenAnswer(invocation -> {
+            FraudStats stats = invocation.getArgument(0);
+            stats.setPhone(stats.getPhone());
+            return stats;
+        });
 
         // When
-        consumer.consume(Map.of(
-                "callId", testCallId.toString(),
-                "phone", "+1234567890",
-                "pattern", "FREQUENT_CALLS",
-                "severity", "HIGH"
-        ), null);
+        consumer.consume(jsonEvent, null);
 
         // Then
         ArgumentCaptor<FraudStats> captor = ArgumentCaptor.forClass(FraudStats.class);
@@ -81,18 +84,22 @@ class FraudAlertConsumerTest {
         metadata.setCallId(testCallId);
         metadata.setAgentId("agent-001");
 
+        String jsonEvent = String.format(
+                "{\"callId\":\"%s\",\"phone\":\"+1234567890\",\"pattern\":\"NPS_ESCALATION\",\"severity\":\"MEDIUM\"}",
+                testCallId
+        );
+
         when(metadataRepository.findByCallId(testCallId)).thenReturn(Optional.of(metadata));
         when(fraudStatsRepository.findByPhoneAndPatternAndSeverity("+1234567890", "NPS_ESCALATION", "MEDIUM"))
                 .thenReturn(Optional.empty());
-        when(fraudStatsRepository.save(any(FraudStats.class))).thenReturn(new FraudStats());
+        when(fraudStatsRepository.save(any(FraudStats.class))).thenAnswer(invocation -> {
+            FraudStats stats = invocation.getArgument(0);
+            stats.setPhone(stats.getPhone());
+            return stats;
+        });
 
         // When
-        consumer.consume(Map.of(
-                "callId", testCallId.toString(),
-                "phone", "+1234567890",
-                "pattern", "NPS_ESCALATION",
-                "severity", "MEDIUM"
-        ), null);
+        consumer.consume(jsonEvent, null);
 
         // Then
         ArgumentCaptor<FraudStats> captor = ArgumentCaptor.forClass(FraudStats.class);
@@ -101,5 +108,17 @@ class FraudAlertConsumerTest {
         FraudStats saved = captor.getValue();
         assertThat(saved.getAgentId()).isEqualTo("agent-001");
         verify(agentReportService, times(1)).evictAgentReportCache("agent-001");
+    }
+
+    @Test
+    void shouldSkipEventWithoutCallId() {
+        // Given
+        String jsonEvent = "{\"phone\":\"+1234567890\",\"pattern\":\"FREQUENT_CALLS\"}";
+
+        // When
+        consumer.consume(jsonEvent, null);
+
+        // Then
+        verify(fraudStatsRepository, never()).save(any());
     }
 }

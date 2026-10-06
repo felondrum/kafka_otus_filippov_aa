@@ -31,10 +31,15 @@ public class CallCompletedConsumer {
             double durationMinutes = event.has("duration") && !event.get("duration").isNull()
                     ? event.get("duration").asDouble() / 60.0
                     : 5.0 / 60.0;
-            String phone = event.get("phone").asText();
+            String phone = event.has("phone") && !event.get("phone").isNull()
+                    ? event.get("phone").asText()
+                    : null;
+            String agentId = event.has("agentId") && !event.get("agentId").isNull()
+                    ? event.get("agentId").asText()
+                    : null;
 
-            log.info("Received call.completed event: callId={}, duration={}min, phone={}", callId, durationMinutes, phone);
-            callMetadataProcessor.processCall(callId, durationMinutes, phone);
+            log.info("Received call.completed event: callId={}, duration={}min, phone={}, agentId={}", callId, durationMinutes, phone, agentId);
+            callMetadataProcessor.processCall(callId, durationMinutes, phone, agentId);
         } catch (JsonProcessingException e) {
             log.error("Failed to process call.completed event: {}", e.getMessage(), e);
             throw new RuntimeException(e);

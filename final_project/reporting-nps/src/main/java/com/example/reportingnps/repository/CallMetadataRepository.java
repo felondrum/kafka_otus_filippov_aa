@@ -33,4 +33,9 @@ public interface CallMetadataRepository extends JpaRepository<CallMetadata, UUID
 
     @Query("SELECT cm.segment, COUNT(cm) FROM CallMetadata cm WHERE cm.callStartTime BETWEEN :from AND :to GROUP BY cm.segment")
     java.util.List<Object[]> countBySegmentBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    long countByAgentIdAndCallStatus(String agentId, String callStatus);
+
+    @Query("SELECT cm.segment, COUNT(cm) FROM CallMetadata cm WHERE cm.agentId = :agentId AND cm.segment IS NOT NULL GROUP BY cm.segment")
+    java.util.List<Object[]> countByAgentIdAndSegment(@Param("agentId") String agentId);
 }

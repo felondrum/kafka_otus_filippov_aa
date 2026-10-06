@@ -35,8 +35,8 @@
 |--------|------|----------|
 | call-processor | 8081 | REST API, Kafka Producer (idempotent), Topic Manager, Spring Retry |
 | fraud-detector | 8082 | Kafka Streams (at_least_once), 3 fraud pattern processors, RocksDB State Store |
-| transcription-analyzer | 8083 | Producer + Consumer + Dual Writer (Kafka + PostgreSQL), synthetic transcription, keyword-based summary |
-| reporting-nps | 8084 | 3 Kafka consumers, REST API, Caffeine-like cache (ConcurrentMapCacheManager), CQRS read side |
+| transcription-analyzer | 8083 | Producer + Consumer + Kafka-first write (Kafka + DLQ, PG via Kafka Connect), synthetic transcription, keyword-based summary |
+| reporting-nps | 8084 | 4 Kafka consumers, REST API, Caffeine-like cache (ConcurrentMapCacheManager), CQRS read side |
 | load-simulator | 8087 | Load generator, Factory pattern, 4 fraud scenarios (NORMAL, ANOMALOUS_DURATION, FREQUENT_CALLS, NPS_ESCALATION) |
 
 ### Топики Kafka (10 шт)
@@ -138,7 +138,7 @@ make chaos-hard         # Hard Shutdown
 | SASL/PLAIN (EXTERNAL listener) | Безопасность Kafka, разделение прав по ACL |
 | Keyword-based summary | Отсутствие LLM — детерминированная логика на ключевых словах |
 | Broadcast enrichment | In-memory ConcurrentMap для customers.profile (key mismatch: callId vs phone) |
-| Dual-write (Kafka → PostgreSQL) | Kafka как primary event source, PG как analytics store |
+| Kafka-first write (Kafka → PG via Kafka Connect) | Kafka как primary event source, PG заполняется через Kafka Connect JDBC Sink, DLQ при неудаче |
 | Gradle (Kotlin DSL) | Build system для всех 5 подпроектов |
 
 ## Связанные документы

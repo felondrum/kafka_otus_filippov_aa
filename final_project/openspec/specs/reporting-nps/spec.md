@@ -14,7 +14,7 @@ The system SHALL consume events from three Kafka topics: calls.metadata, transcr
 
 #### Scenario: Consumer reads from transcription.enriched
 - **WHEN** the reporting-nps service starts
-- **THEN** it creates a Kafka consumer group that reads from the transcription.enriched topic
+- **THEN** it creates a Kafka consumer group that reads from the `transcription.enriched` topic for cache invalidation only (data is populated in PostgreSQL by Kafka Connect JDBC Sink)
 
 #### Scenario: Consumer reads from calls.fraud-alerts
 - **WHEN** the reporting-nps service starts
@@ -27,6 +27,8 @@ The system SHALL consume events from three Kafka topics: calls.metadata, transcr
 ### Requirement: CQRS Read Side — Read-only Access
 
 The system SHALL read from PostgreSQL to provide analytics based on data populated by the Kafka Connect JDBC Sink.
+
+**Note:** The reporting-nps service is **read-only** with respect to `call_transcriptions` and `call_metadata`. All writes to these tables are handled exclusively by Kafka Connect JDBC Sink connector and MetadataManager.
 
 #### Scenario: Metadata access
 - **WHEN** the reporting-nps service queries the database
@@ -121,15 +123,9 @@ The system SHALL handle processing errors gracefully without stopping the consum
 
 #### Scenario: Malformed Avro event
 - **WHEN** a Kafka event cannot be deserialized (malformed Avro, schema mismatch)
-- **THEN** the system logs the error with the raw payload, sends the event to an internal DLQ, and continues processing subsequent events
+- **THEN** the system logs the error with the raw payload and continues processing subsequent events
 
-#### Scenario: PostgreSQL write failure
-- **WHEN** a PostgreSQL write fails during event processing
-- **THEN** the system retries the write up to 3 times with exponential backoff (1s, 2s, 4s); if all retries fail, the event is sent to an internal DLQ and the consumer continues processing
 
-#### Scenario: Processing timeout
-- **WHEN** event processing exceeds the configured timeout (default 30 seconds)
-- **THEN** the system logs a warning, commits the current offset, and retries the event on next consumption cycle
 
 ### Requirement: Data Consistency Monitoring
 
@@ -139,4 +135,4 @@ The system SHALL monitor for data inconsistencies caused by asynchronous process
 - **WHEN** reporting-nps service is running
 - **THEN** it exposes `consumer_lag` metric for the subscribed topics, alerting if the lag exceeds 10 seconds to detect data staleness.
 
-**Note on Temporal Consistency:** Due to the asynchronous nature of Kafka Connect (database writer) and reporting-nps (consumer), a transient period of data inconsistency (when transcription data is not yet in PG, but metadata event is processed) is expected. This is handled by upsert logic in the database and monitored via consumer lag.
+**Note on Temporal Consistency:** Due to the asynchronous nature of Kafka Connect (database writer) and reporting-nps (consumer), a transient period of data inconsistency (when transcription data is not yet in PG, but metadata event is processed) is expected. This is handled by upsert logic in the database and monitored via consumer lag. The reporting-nps service is read-only and only invalidates caches on event consumption.

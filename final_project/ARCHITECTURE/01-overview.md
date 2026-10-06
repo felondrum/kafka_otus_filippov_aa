@@ -36,7 +36,7 @@
 - **call-processor:** `enable.idempotence=true`, `acks=all` (idempotent producer).
 - **fraud-detector:** `processing.guarantee=at_least_once` (State Store с RocksDB, пересоздание состояния из Kafka при rebalance).
 - **reporting-nps:** manual acknowledgment (`AckMode.MANUAL`) — подтверждение после успешной записи в PostgreSQL.
-- **transcription-analyzer:** dual-write с retry (3 попытки, exponential backoff) и отправкой в DLQ при неудаче.
+- **transcription-analyzer:** Kafka-first write с отправкой в DLQ при неудаче, PostgreSQL заполняется через Kafka Connect JDBC Sink.
 
 ### Schema Evolution
 

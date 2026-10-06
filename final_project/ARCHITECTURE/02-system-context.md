@@ -59,7 +59,6 @@ call-processor ──[Kafka calls.metadata]──▶ reporting-nps
 fraud-detector ──[Kafka calls.fraud-alerts]──▶ reporting-nps
 transcription-analyzer ──[Kafka transcription.enriched]──▶ reporting-nps
 transcription-analyzer ──[Kafka]──▶ Kafka Connect (JDBC Sink)──▶ PostgreSQL
-transcription-analyzer ──[JDBC]──▶ PostgreSQL (DualWriter)
 load-simulator ──[HTTPS POST /api/load/start]──▶ call-processor
 Monitoring System ──[HTTP /metrics]──▶ все сервисы + Kafka
 ```

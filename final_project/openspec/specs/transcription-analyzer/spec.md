@@ -1,6 +1,6 @@
 ## Purpose
 
-Определяет требования к модулю обработки транскрипции и суммаризации диалогов: генерация синтетического текста транскрипции (фиктивный текст на основе duration звонка, без аудио), broadcast enrichment с профилем клиента, synthetic summary generation через keyword matching (без реальной LLM), dual-write в Kafka и PostgreSQL, управление жизненным циклом метаданных звонка.
+Определяет требования к модулю обработки транскрипции и суммаризации диалогов: генерация синтетического текста транскрипции (фиктивный текст на основе duration звонка, без аудио), broadcast enrichment с профилем клиента, synthetic summary generation через keyword matching (без реальной LLM), Kafka producer для enriched транскрипций, управление жизненным циклом метаданных звонка.
 
 ## ADDED Requirements
 
@@ -86,21 +86,17 @@ The system SHALL enrich transcription summaries with customer profile data via b
 | standard  |             | normal  | normal | high     |
 | corporate |             | normal  | high   | critical |
 
-### Requirement: Dual-Write Strategy
+### Requirement: Kafka Producer for Enriched Transcriptions
 
-The system SHALL write enriched transcription data to both Kafka (transcription.enriched) and PostgreSQL (call_transcriptions table). Kafka produce happens before PostgreSQL write.
+The system SHALL write enriched transcription data to the `transcription.enriched` Kafka topic. PostgreSQL writes are handled exclusively by the Kafka Connect JDBC Sink connector.
 
 #### Scenario: Enriched event produced to transcription.enriched
 - **WHEN** enrichment is complete
-- **THEN** the system produces the enriched event to transcription.enriched with callId as key and Avro format
+- **THEN** the system produces the enriched event to `transcription.enriched` with callId as key and Confluent JSON format
 
-#### Scenario: Enriched event written to PostgreSQL
-- **WHEN** enrichment is complete
-- **THEN** the system writes the enriched data to the call_transcriptions table in PostgreSQL via JDBC
-
-#### Scenario: PostgreSQL failure with Kafka success
-- **WHEN** PostgreSQL write fails after Kafka produce succeeds
-- **THEN** the system retries the JDBC write (3 attempts, exponential backoff), logs the error, and sends the failed event to internal DLQ for manual review. The Kafka event is already consumed by reporting-nps — PostgreSQL will be updated via retry or manual reconciliation.
+#### Scenario: Kafka failure handled via DLQ
+- **WHEN** Kafka produce fails
+- **THEN** the system sends the failed event to `transcription.enriched.dlq` topic for manual review and throws a RuntimeException
 
 ### Requirement: Metadata Lifecycle Management
 
@@ -115,7 +111,7 @@ The system SHALL manage and update the call metadata lifecycle through status tr
 - **THEN** the system produces a metadata event with status=SUMMARIZING to calls.metadata
 
 #### Scenario: Status transition COMPLETED
-- **WHEN** dual-write (Kafka + PostgreSQL) is complete
+- **WHEN** Kafka produce to `transcription.enriched` is complete
 - **THEN** the system produces a metadata event with status=COMPLETED to calls.metadata
 
 #### Scenario: Metadata uses compaction
@@ -124,15 +120,15 @@ The system SHALL manage and update the call metadata lifecycle through status tr
 
 ### Requirement: Transcription Text Storage
 
-The system SHALL store the full transcription text in PostgreSQL for archival and search.
+The system SHALL produce enriched transcription data to Kafka for storage in PostgreSQL via Kafka Connect JDBC Sink connector.
 
-#### Scenario: Full transcription stored in PostgreSQL
-- **WHEN** dual-write is performed
-- **THEN** the call_transcriptions table stores: call_id (FK), transcription_text, sentiment, urgency, problem, solution, confidence
+#### Scenario: Enriched data includes all required fields
+- **WHEN** enriched event is produced to `transcription.enriched`
+- **THEN** the payload includes: `call_id`, `transcription_text`, `sentiment`, `urgency`, `problem`, `solution`, `confidence`, `segment`, `risk_level`, `priority`
 
 #### Scenario: Foreign key constraint maintained
-- **WHEN** a transcription record is inserted
-- **THEN** call_id must reference an existing record in call_metadata table
+- **WHEN** Kafka Connect JDBC Sink writes to `call_transcriptions`
+- **THEN** `call_id` must reference an existing record in `call_metadata` table (ensured by MetadataManager)
 
 ### Requirement: Keyword Extraction
 

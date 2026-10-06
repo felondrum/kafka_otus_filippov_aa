@@ -28,13 +28,14 @@ public class CallController {
     public ResponseEntity<Map<String, String>> processCall(@RequestBody Map<String, Object> request) {
         String callId = (String) request.get("callId");
         double durationMinutes = Double.parseDouble(request.getOrDefault("durationMinutes", "5.0").toString());
-        String phone = (String) request.getOrDefault("phone", "unknown");
+        String phone = (String) request.get("phone");
+        String agentId = (String) request.get("agentId");
 
         if (callId == null || callId.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "callId is required"));
         }
 
-        callMetadataProcessor.processCall(callId, durationMinutes, phone);
+        callMetadataProcessor.processCall(callId, durationMinutes, phone, agentId);
 
         return ResponseEntity.accepted().body(Map.of(
                 "callId", callId,
