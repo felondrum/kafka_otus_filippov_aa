@@ -13,10 +13,10 @@
 │  └──────────┘    └──────────┘    └──────────┘               │
 │       │                  │                  │                │
 │       ▼                  ▼                  ▼                │
-│  Maven/Gradle        JUnit 5            Docker              │
-│  checkstyle          Testcontainers     ARM64 images        │
-│  compile             Embedded Kafka     multi-platform      │
-│  javadoc             Integration tests │                    │
+│  Gradle (Kotlin DSL)   JUnit 5            Docker              │
+│  check                 Testcontainers     ARM64 images        │
+│  compile               Embedded Kafka     multi-platform      │
+│  javadoc               Integration tests │                    │
 │                                               ┌──────────┐  │
 │                                               │  Stage   │  │
 │                                               │   4      │  │

@@ -2,34 +2,34 @@ groups:
   - name: kafka-connect-alerts
     rules:
       - alert: KafkaConnectDLQEvents
-        expr: increase(kafka_connect_sink_topic_total_errors_total[5m]) > 0
+        expr: kafka_connect_task_error_metrics_connector_kafka_connect_jdbc_sink_total_record_errors:_0_0 > 0
         for: 0m
         labels:
           severity: warning
         annotations:
           summary: "Kafka Connect DLQ receiving events"
-          description: "The Kafka Connect JDBC Sink connector has sent {{ $value }} events to the dead-letter queue in the last 5 minutes. Connector: kafka-connect-jdbc-sink. Check connector logs and DLQ topic: transcription.enriched.dlq"
+          description: "The Kafka Connect JDBC Sink connector has encountered {{ $value }} record errors. Check connector logs and DLQ topic: transcription.enriched.dlq"
 
       - alert: KafkaConnectConnectorFailed
-        expr: kafka_connect_connector_connector_status{connector="kafka-connect-jdbc-sink"} == 0
+        expr: kafka_connect_connect_worker_metrics_connector_failed_task_count:_0 > 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Kafka Connect JDBC Sink connector is FAILED"
-          description: "The kafka-connect-jdbc-sink connector has been in FAILED state for more than 1 minute. Immediate investigation required."
+          summary: "Kafka Connect JDBC Sink connector has failed tasks"
+          description: "The kafka-connect-jdbc-sink connector has {{ $value }} failed tasks. Immediate investigation required."
 
       - alert: KafkaConnectConnectorPaused
-        expr: kafka_connect_connector_connector_status{connector="kafka-connect-jdbc-sink"} == 2
+        expr: kafka_connect_connect_worker_metrics_connector_paused_task_count:_0 > 0
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Kafka Connect JDBC Sink connector is PAUSED"
-          description: "The kafka-connect-jdbc-sink connector has been in PAUSED state for more than 5 minutes."
+          summary: "Kafka Connect JDBC Sink connector has paused tasks"
+          description: "The kafka-connect-jdbc-sink connector has {{ $value }} paused tasks for more than 5 minutes."
 
       - alert: KafkaConnectTaskFailed
-        expr: kafka_connect_task_task_status{connector="kafka-connect-jdbc-sink"} == 0
+        expr: kafka_connect_connect_worker_metrics_connector_failed_task_count:_0 > 0
         for: 1m
         labels:
           severity: critical

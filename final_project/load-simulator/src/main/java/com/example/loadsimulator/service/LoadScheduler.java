@@ -123,8 +123,8 @@ public class LoadScheduler {
 
             // Fraud calls are split evenly among 3 scenarios
             int anomalousDurationCalls = fraudCallCount / 3;
-            int frequentCallsBursts = (fraudCallCount / 3) / 6; // each burst = 6+ calls
-            int npsEscalationSequences = (fraudCallCount / 3) / 3; // each sequence = 3+ calls
+            int frequentCallsBursts = Math.max(1, fraudCallCount / 6); // each burst = 6+ calls
+            int npsEscalationSequences = Math.max(1, fraudCallCount / 3); // each sequence = 3+ calls
 
             // Generate fraud call events upfront
             List<CallEventRequest> anomalousDurationCallsList = new ArrayList<>();

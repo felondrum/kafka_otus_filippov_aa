@@ -182,7 +182,16 @@ public record CallRequest(
 
 ## 7.5. Защита REST API (Spring Security)
 
-### 7.5.1. Конфигурация безопасности
+### 7.5.1. Текущее состояние
+
+**Spring Security НЕ реализован.** Все REST endpoints открыты для любого запроса.
+
+- Нет `SecurityFilterChain` bean в любом из 4 микросервисов.
+- Нет зависимости `spring-boot-starter-security` в `build.gradle.kts`.
+- Нет аутентификации/авторизации на уровне HTTP.
+- Health endpoints (`/actuator/health`) доступны без аутентификации.
+
+### 7.5.2. Рекомендуемая конфигурация (future)
 
 ```java
 @Configuration
@@ -292,15 +301,15 @@ public class CorrelationIdInterceptor implements ProducerInterceptor<String, Cal
 
 ## 7.8. Security Summary
 
-| Аспект | Механизм |
-|--------|----------|
-| Kafka аутентификация | SASL/PLAIN |
-| Kafka авторизация | ACL (per-user, per-topic) |
-| Schema Registry | BACKWARD compatibility |
-| REST API аутентификация | HTTP Basic + Spring Security |
-| REST API авторизация | Role-based (CALLER, ADMIN) |
-| Валидация входных данных | Bean Validation (JSR-380) |
-| БД аутентификация | PostgreSQL users with passwords |
-| БД авторизация | GRANT per user/table |
-| Tracing | Correlation ID через весь пайплайн |
-| DLQ | Изоляция битых сообщений |
+| Аспект | Статус | Механизм |
+|--------|--------|----------|
+| Kafka аутентификация | ✅ Реализован | SASL/PLAIN на EXTERNAL listener |
+| Kafka авторизация | ✅ Реализован | ACL (per-user, per-topic) |
+| Schema Registry | ✅ Реализован | BACKWARD compatibility, JSON format |
+| REST API аутентификация | ❌ Не реализован | Spring Security отсутствует |
+| REST API авторизация | ❌ Не реализован | Все endpoints открыты |
+| Валидация входных данных | ✅ Реализован | Bean Validation (JSR-380) |
+| БД аутентификация | ✅ Реализован | PostgreSQL users with passwords |
+| БД авторизация | ✅ Реализован | GRANT per user/table |
+| Tracing | ✅ Реализован | Correlation ID через весь пайплайн (MDC + Kafka headers) |
+| DLQ | ✅ Реализован | `calls.dlq` + `transcription.enriched.dlq` |

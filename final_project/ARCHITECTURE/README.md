@@ -4,7 +4,7 @@
 
 Архитектурная документация событийно-ориентированной платформы для обработки звонков банковского колл-центра на базе Apache Kafka.
 
-**Стек:** Java 21, Spring Boot 3, Apache Kafka (KRaft), PostgreSQL 15, JSON, Docker Compose.
+**Стек:** Java 21, Spring Boot 3.2.3, Apache Kafka 7.6.1 (KRaft, 3 брокера), PostgreSQL 15, JSON, Docker Compose.
 
 **Уровень C4:** Container (Level 2).
 
@@ -12,7 +12,7 @@
 
 | № | Файл | Раздел | Описание |
 |---|------|--------|----------|
-| 1 | [01-overview.md](./01-overview.md) | Overview | Бизнес-цели, архитектурные принципы (EDA, CQRS, EDA) |
+| 1 | [01-overview.md](./01-overview.md) | Overview | Бизнес-цели, архитектурные принципы (EDA, CQRS, at_least_once, JSON, resilience) |
 | 2 | [02-system-context.md](./02-system-context.md) | System Context (C4 Level 1) | Внешние акторы, системы, связи |
 | 3 | [03-container-architecture.md](./03-container-architecture.md) | Container Architecture (C4 Level 2) | 4 микросервиса, Kafka Cluster, PostgreSQL, мониторинг |
 | 4 | [04-data-flow.md](./04-data-flow.md) | Data Flow | Топики Kafka (8 шт), потоки данных, таблицы |
@@ -20,7 +20,7 @@
 | 6 | [06-infrastructure.md](./06-infrastructure.md) | Infrastructure | Docker Compose, ресурсы, сеть, volumes |
 | 7 | [07-security.md](./07-security.md) | Security | SASL/PLAIN, ACL, Schema Registry, Spring Security |
 | 8 | [08-monitoring.md](./08-monitoring.md) | Monitoring & Observability | Prometheus, Grafana, JSON-логирование, Correlation ID |
-| 9 | [09-cicd.md](./09-cicd.md) | CI/CD Pipeline | Makefile, bash-скрипты, quality gates |
+| 9 | [09-cicd.md](./09-cicd.md) | CI/CD Pipeline | Makefile, Gradle, bash-скрипты, quality gates |
 | 10 | [10-deployment.md](./10-deployment.md) | Deployment Model | Local (docker-compose), profiles, scaling |
 | 11 | [11-unit-testing.md](./11-unit-testing.md) | Unit Testing | JUnit 5, Mockito, Embedded Kafka |
 | 12 | [12-integration-testing.md](./12-integration-testing.md) | Integration Testing | Testcontainers, Kafka, PostgreSQL |
@@ -33,31 +33,36 @@
 
 | Сервис | Порт | Описание |
 |--------|------|----------|
-| call-processor | 8081 | REST API, Kafka Producer, Topic Manager |
-| fraud-detector | 8082 | Kafka Streams, детекция фрода |
-| transcription-analyzer | 8083 | Producer + Streams + Consumer, dual-write |
-| reporting-nps | 8084 | Consumer + REST API, CQRS read side |
+| call-processor | 8081 | REST API, Kafka Producer (idempotent), Topic Manager, Spring Retry |
+| fraud-detector | 8082 | Kafka Streams (at_least_once), 3 fraud pattern processors, RocksDB State Store |
+| transcription-analyzer | 8083 | Producer + Consumer + Dual Writer (Kafka + PostgreSQL), synthetic transcription, keyword-based summary |
+| reporting-nps | 8084 | 3 Kafka consumers, REST API, Caffeine-like cache (ConcurrentMapCacheManager), CQRS read side |
+| load-simulator | 8087 | Load generator, Factory pattern, 4 fraud scenarios (NORMAL, ANOMALOUS_DURATION, FREQUENT_CALLS, NPS_ESCALATION) |
 
-### Топики Kafka (8 шт)
+### Топики Kafka (10 шт)
 
-| Топик | Тип | Ключ |
-|-------|-----|------|
-| calls.completed | Stream | callId |
-| calls.metadata | Compacted Table | callId |
-| calls.fraud-alerts | Stream | phone |
-| transcription.raw | Stream | callId |
-| transcription.summary | Stream | callId |
-| transcription.enriched | Stream | callId |
-| calls.dlq | Stream | callId |
-| customers.profile | Compacted Table | phone |
+| Топик | Тип | Ключ | Описание |
+|-------|-----|------|----------|
+| calls.completed | Stream | callId | Событие о завершённом звонке |
+| calls.metadata | Compacted Table | callId | Метаинформация (статус-лайфцикл) |
+| calls.fraud-alerts | Stream | phone | Алерты антифрод-модуля |
+| transcription.raw | Stream | callId | Сырая транскрипция (синтетическая) |
+| transcription.summary | Stream | callId | Суммаризация (keyword-based) |
+| transcription.enriched | Stream | callId | Обогащённая суммаризация |
+| transcription.enriched.dlq | Stream | callId | DLQ для enriched events |
+| calls.dlq | Stream | callId | Dead Letter Queue |
+| customers.profile | Compacted Table | phone | Профили клиентов (сегмент, риск) |
+| calls.completed.agg / calls.fraud-alerts.agg | Stream | agentId / phone | ksqlDB output topics |
 
 ### Инструменты мониторинга
 
 | Инструмент | Порт | Назначение |
 |------------|------|------------|
-| Prometheus | 9090 | Сбор метрик |
-| Grafana | 3000 | Визуализация, алерты |
+| Prometheus | 9090 | Сбор метрик (JMX, JVM, Spring Boot Actuator) |
+| Grafana | 3000 | Визуализация, 8 дашбордов, алерты |
 | Kafdrop | 9000 | UI для Kafka |
+| Kafka Exporter | 9308 | Topic/partition metrics |
+| Postgres Exporter | 9187 | PostgreSQL metrics |
 
 ## Быстрый старт
 
@@ -126,11 +131,15 @@ make chaos-hard         # Hard Shutdown
 | Решение | Обоснование |
 |---------|-------------|
 | Apache Kafka (KRaft) | Отказ от ZooKeeper, упрощение инфраструктуры |
-| JSON + Schema Registry | Типобезопасность, эволюция схем |
-| Kafka Streams | Exactly-once, stateful processing, RocksDB |
-| CQRS | Независимое масштабирование записи и чтения |
+| JSON + Schema Registry | Простота, Confluent JSON format, BACKWARD совместимость |
+| Kafka Streams (at_least_once) | Stateful processing, RocksDB, восстановление из changelog |
+| CQRS | Независимое масштабирование записи (Kafka) и чтения (PostgreSQL) |
 | Docker Compose | Единая среда разработки, ARM64 совместимость |
-| SASL/PLAIN + ACL | Безопасность Kafka, разделение прав |
+| SASL/PLAIN (EXTERNAL listener) | Безопасность Kafka, разделение прав по ACL |
+| Keyword-based summary | Отсутствие LLM — детерминированная логика на ключевых словах |
+| Broadcast enrichment | In-memory ConcurrentMap для customers.profile (key mismatch: callId vs phone) |
+| Dual-write (Kafka → PostgreSQL) | Kafka как primary event source, PG как analytics store |
+| Gradle (Kotlin DSL) | Build system для всех 5 подпроектов |
 
 ## Связанные документы
 

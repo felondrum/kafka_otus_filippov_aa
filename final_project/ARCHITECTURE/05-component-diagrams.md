@@ -62,11 +62,11 @@
 
 | Компонент | Описание |
 |-----------|----------|
-| **REST Controller** | Обработка HTTP запросов, валидация входных данных |
-| **Validator** | Проверка схемы (phone format, duration > 0, agentId not null) |
-| **Kafka Producer** | Отправка событий с idempotent mode и acks=all |
-| **Topic Manager** | Создание топиков при старте через Admin API |
-| **Error Handler** | Retry (3x exponential backoff) → DLQ → metrics |
+| **REST Controller** | Обработка HTTP запросов (`POST /api/calls`), валидация входных данных |
+| **Validator** | Bean Validation (JSR-380): UUID format, E.164 phone, duration >= 1, agentId not blank, NPS 0-10 |
+| **Kafka Producer** | `KafkaTemplate<String, String>` с idempotent mode (`enable.idempotence=true`, `acks=all`) |
+| **Topic Manager** | `@PostConstruct initTopics()` — создаёт 3 топика через AdminClient (replication-factor=1) |
+| **Error Handler** | Spring Retry `@Retryable` (3 попытки, backoff 1s×2), DLQ на `calls.dlq` |
 
 **REST API:**
 
@@ -74,6 +74,16 @@
 |-------|----------|----------|
 | POST | `/api/calls` | Принять событие о завершённом звонке |
 | GET | `/api/health` | Health check (Spring Actuator) |
+
+**Валидация (CallEventRequest.java):**
+
+| Поле | Правило | Описание |
+|------|---------|----------|
+| `callId` | `@NotBlank` + `@Pattern` (UUID) | Уникальный идентификатор звонка |
+| `phone` | `@NotBlank` + `@Pattern` (E.164) | Номер телефона |
+| `duration` | `@Min(1)` | Длительность (1+ сек) |
+| `agentId` | `@NotBlank` | Идентификатор агента |
+| `npsScore` | `@Min(0)` + `@Max(10)` | NPS-оценка (0-10) |
 
 ## 5.2. fraud-detector
 
@@ -161,15 +171,35 @@
 
 | Компонент | Описание |
 |-----------|----------|
-| **Source** | Чтение из `calls.completed` |
-| **Phone Normalizer** | Нормализация phone number в E.164 формат |
-| **Filter** | Отсев коротких звонков (< 5 сек) |
-| **GroupBy + Windowed Count** | Подсчёт звонков с одного номера за 1 минуту (hopping window) |
-| **Predicate** | Детекция порога (> 5 звонков/мин) |
-| **Anomalous Duration Detector** | Детекция длительных звонков (> 300 сек) |
-| **Processor API** | Детекция эскалации (3x негативный NPS за день) |
-| **State Store (RocksDB)** | Хранение счётчиков с per-phone TTL 24 часа |
-| **Output** | Запись алертов в `calls.fraud-alerts` (JSON via Schema Registry) |
+| **Source** | Чтение из `calls.completed` (String/String, JSON) |
+| **PhoneNormalizer** | Нормализация phone number в E.164 формат |
+| **Filter** | Отсев коротких звонков (< 5 сек, configurable) |
+| **FrequentCallsProcessor** | DSL Hopping Window (60s size, 10s advance), RocksDB, > 5 calls/window → FREQUENT_CALLS (MEDIUM) |
+| **AnomalousDurationProcessor** | Filter: duration > 300 сек → ANOMALOUS_DURATION (LOW) |
+| **NpsEscalationProcessor** | Processor API + KeyValueStore, 3x NPS < 2 за 24ч → NPS_ESCALATION (HIGH) |
+| **State Store** | RocksDB (frequent-calls-count) + persistent KeyValueStore (nps-escalation-store) |
+| **Output** | Запись алертов в `calls.fraud-alerts` (JSON via StringSerializer) |
+
+**Streams Configuration:**
+
+```
+processing.guarantee = at_least_once
+state.dir = /tmp/kafka-streams/fraud-detector
+cache.max.bytes.buffering = 10485760 (10 MB)
+spring.application.name = fraud-detector
+```
+
+**FraudDetectorProperties.java (конфигурируемые параметры):**
+
+| Параметр | Значение по умолчанию | Описание |
+|----------|---------------------|----------|
+| `window.size` | 60000ms (1 мин) | Hopping window для frequent calls |
+| `window.advance` | 10000ms (10 сек) | Advance interval |
+| `threshold` | 5 | Max calls per window |
+| `nps.threshold` | 3 | Max negative NPS per 24h |
+| `nps.score` | 2 | NPS < 2 = negative |
+| `min.duration` | 5000ms (5 сек) | Минимальная длительность |
+| `max.duration` | 300000ms (5 мин) | Максимальная длительность |
 
 **Streams Configuration:**
 
@@ -280,13 +310,29 @@ Spring Boot Actuator: GET /actuator/health
 
 | Компонент | Описание |
 |-----------|----------|
-| **Audio Simulator** | Симуляция аудио → текст на основе duration |
-| **Producer** | Отправка raw транскрипции в `transcription.raw` |
-| **Streams Processor** | Чтение raw + summary, join с customers.profile |
-| **LLM Simulator** | Извлечение problem, solution, sentiment, urgency, confidence |
-| **Enricher** | Обогащение сегментом, risk_level, priority |
-| **Dual Writer** | Запись в Kafka (enriched) + JDBC (PostgreSQL) |
-| **Metadata Manager** | Управление жизненным циклом статусов звонка |
+| **CallCompletedConsumer** | `@KafkaListener` на `calls.completed` — триггерит pipeline |
+| **TranscriptionProducer** | Template-based synthetic transcription (~150 words/min, configurable) |
+| **SummaryGenerator** | Keyword-based heuristic: извлечение problem/solution/sentiment/urgency/confidence |
+| **CustomerProfileManager** | Broadcast enrichment — in-memory `ConcurrentHashMap<String, Map<String, String>>` |
+| **EnrichmentService** | Обогащение summary с segment/riskLevel/priority из CustomerProfileManager |
+| **DualWriter** | Kafka-first write: сначала `transcription.enriched`, потом PostgreSQL с retry (3 attempts, 1s→2s→4s), DLQ при неудаче |
+| **MetadataManager** | Status lifecycle: PENDING → TRANSCRIBING → SUMMARIZING → COMPLETED |
+
+**SummaryGenerator.java (keyword-based):**
+
+| Keyword | Problem | Solution | Sentiment | Urgency |
+|---------|---------|----------|-----------|---------|
+| fraud/unauthorized/stolen | fraud_suspected | escalated | negative | critical |
+| lost/stolen/card | card_loss | card_blocked | negative | high |
+| complaint/escalat | complaint | escalation_created | negative | high |
+| loan/credit/limit | credit_inquiry | info_provided | neutral | low |
+| blocked/block | card_loss | card_blocked | neutral | medium |
+
+**Customer Profile Enrichment (broadcast pattern):**
+- `CustomerProfileConsumer` слушает `customers.profile` через `@KafkaListener`
+- `CustomerProfileManager` хранит профили в `ConcurrentHashMap<String, Map<String, String>>`
+- `EnrichmentService` выполняет lookup по phone при обработке каждого summary event
+- **Не KTable join** — broadcast pattern из-за key mismatch (summary key=callId, profile key=phone)
 
 ## 5.4. reporting-nps
 
@@ -382,12 +428,33 @@ Spring Boot Actuator: GET /actuator/health
 
 | Компонент | Описание |
 |-----------|----------|
-| **Consumer (metadata)** | Чтение `calls.metadata`, обновление PostgreSQL |
-| **Consumer (enriched)** | Чтение `transcription.enriched`, сохранение расшифровок |
-| **Consumer (fraud-alerts)** | Чтение `calls.fraud-alerts`, статистика фрода |
-| **Service Layer** | Агрегация данных, кэширование результатов |
-| **REST API** | Предоставление отчётов и статусов |
-| **State Store** | Кэширование для быстрых запросов (CQRS read side) |
+| **MetadataConsumer** | `@KafkaListener` на `calls.metadata`, `AckMode.MANUAL` — обновляет PostgreSQL call_metadata |
+| **EnrichedTranscriptionConsumer** | `@KafkaListener` на `transcription.enriched`, `AckMode.MANUAL` — writes to call_transcriptions, orphan buffering |
+| **FraudAlertConsumer** | `@KafkaListener` на `calls.fraud-alerts`, `AckMode.MANUAL` — aggregates fraud stats, correlates with call metadata |
+| **ReportController** | `GET /api/reports/daily` (with from/to params) — daily reports with caching |
+| **AgentReportController** | `GET /api/reports/agent/{id}` — per-agent performance |
+| **SentimentController** | `GET /api/sentiment/distribution` — sentiment distribution |
+| **MetadataController** | `GET /api/metadata/{callId}`, `GET /api/metadata/status/{status}` — call status queries |
+| **CacheConfig** | `ConcurrentMapCacheManager` (metadataCache, reportCache, sentimentCache) |
+
+**REST API:**
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/api/reports/daily` | Дневная сводка (NPS, кол-во звонков) |
+| GET | `/api/reports/agent/{id}` | Статистика по агенту |
+| GET | `/api/metadata/{callId}` | Актуальный статус звонка |
+| GET | `/api/metadata/status/{status}` | Звонки по статусу |
+| GET | `/api/sentiment/distribution` | Распределение тональности за период |
+| GET | `/api/health` | Health check |
+
+**JPA Entities:**
+
+| Entity | Table | Fields | Repositories |
+|--------|-------|--------|-------------|
+| `CallMetadata` | call_metadata (21 columns) | callId, customerPhone, agentId, callDuration, callStatus, sentiment, segment, riskLevel, priority, ... | CallMetadataRepository |
+| `CallTranscription` | call_transcriptions (17 columns) | transcriptionId, callId(FK), transcriptionText, language, confidenceScore, problem, solution, sentiment, ... | CallTranscriptionRepository |
+| `FraudStats` | fraud_stats (9 columns) | id, phone, callId, pattern, severity, count, lastAlertAt, agentId | FraudStatsRepository |
 
 **REST API:**
 

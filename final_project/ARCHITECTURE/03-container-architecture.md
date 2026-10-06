@@ -2,7 +2,7 @@
 
 ## 3.1. Описание
 
-На уровне контейнеров система состоит из 4 микросервисов, брокера Kafka (3 узла, KRaft), PostgreSQL, Schema Registry и инструментов мониторинга.
+На уровне контейнеров система состоит из 5 микросервисов, брокера Kafka (3 узла, KRaft), PostgreSQL, Schema Registry, Kafka Connect, ksqlDB и инструментов мониторинга.
 
 ## 3.2. ASCII-диаграмма
 
@@ -67,10 +67,11 @@
 
 | Контейнер | Технология | Роль | Порт |
 |-----------|-----------|------|------|
-| **call-processor** | Spring Boot 3, Java 21 | REST API (POST /api/calls), Kafka Producer, Topic Manager | 8081 |
-| **fraud-detector** | Spring Boot 3, Kafka Streams | Потоковая обработка calls.completed, детекция фрода | 8082 |
-| **transcription-analyzer** | Spring Boot 3, Kafka Streams | Producer (raw transcription), Streams (enrichment), Consumer (JDBC) | 8083 |
-| **reporting-nps** | Spring Boot 3, Spring Data JPA | Consumer, REST API для отчётов, CQRS read side | 8084 |
+| **call-processor** | Spring Boot 3, Java 21 | REST API (POST /api/calls), Kafka Producer (idempotent), Topic Manager, Spring Retry (@Retryable) | 8081 |
+| **fraud-detector** | Spring Boot 3, Kafka Streams | Потоковая обработка calls.completed, детекция фрода (3 pattern processor), at_least_once | 8082 |
+| **transcription-analyzer** | Spring Boot 3, Kafka Consumer + Producer | Producer (raw transcription), Consumer (enriched), Dual Writer (Kafka + PostgreSQL), synthetic transcription | 8083 |
+| **reporting-nps** | Spring Boot 3, Spring Data JPA | 3 Kafka consumers, REST API для отчётов, CQRS read side, ConcurrentMapCacheManager | 8084 |
+| **load-simulator** | Spring Boot 3 | Load generator, Factory pattern, 4 fraud scenarios (NORMAL, ANOMALOUS_DURATION, FREQUENT_CALLS, NPS_ESCALATION) | 8087 |
 
 ### Брокер и инфраструктура
 
@@ -80,7 +81,7 @@
 | **Kafka 2** | `confluentinc/cp-kafka:latest` | Брокер Kafka (controller) | 9092, 9093 |
 | **Kafka 3** | `confluentinc/cp-kafka:latest` | Брокер Kafka | 9092, 9093 |
 | **Schema Registry** | `confluentinc/cp-schema-registry:7.6.1` | Хранение JSON-схем | 8085 |
-| **Kafka Connect** | `confluentinc/cp-kafka-connect:latest` | JDBC Sink connector для PostgreSQL | 8086 |
+| **Kafka Connect** | custom build (Dockerfile в infrastructure/kafka-connect/) | JDBC Sink connector для PostgreSQL | 8086 |
 | **PostgreSQL** | `postgres:15-alpine` | Аналитическое хранилище | 5432 |
 | **Prometheus** | `prom/prometheus:latest` | Сбор метрик | 9090 |
 | **Grafana** | `grafana/grafana:latest` | Визуализация | 3000 |

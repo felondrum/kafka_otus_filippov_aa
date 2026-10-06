@@ -81,16 +81,17 @@ Caller (REST)
 
 | Топик | Тип | Ключ | Формат | Репликация | Партиции | Описание |
 |-------|-----|------|--------|------------|----------|----------|
-| `calls.completed` | Stream | `callId` | JSON | 3 | 6 | Событие о завершённом звонке |
-| `calls.metadata` | Compacted Table | `callId` | JSON | 3 | 6 | Метаинформация звонка (жизненный цикл статусов) |
-| `calls.fraud-alerts` | Stream | `phone` | JSON | 3 | 6 | Алерты антифрод-модуля |
-| `transcription.raw` | Stream | `callId` | JSON | 3 | 6 | Сырая транскрипция диалога (симуляция) |
-| `transcription.summary` | Stream | `callId` | JSON | 3 | 6 | Суммаризация от LLM (проблема, решение, сентимент) |
-| `transcription.enriched` | Stream | `callId` | JSON | 3 | 6 | Обогащённая суммаризация с профилем клиента |
-| `calls.dlq` | Stream | `callId` | JSON | 3 | 6 | Dead Letter Queue для битых сообщений |
-| `customers.profile` | Compacted Table | `phone` | JSON | 3 | 6 | Профили клиентов (сегмент, риск-уровень) |
-| `calls.completed.agg` | Stream | `agentId` | JSON | 1 | 6 | **ksqlDB output**: агрегация завершённых звонков по agentId (call_count, avg_nps_score, last_call_at) |
-| `calls.fraud-alerts.agg` | Stream | `phone` | JSON | 1 | 6 | **ksqlDB output**: агрегация фрод-алертов по phone (alert_count) |
+| `calls.completed` | Stream | `callId` | JSON (String/String) | 3 | 6 | Событие о завершённом звонке |
+| `calls.metadata` | Compacted Table | `callId` | JSON (String/String) | 3 | 6 | Метаинформация звонка (жизненный цикл статусов) |
+| `calls.fraud-alerts` | Stream | `phone` | JSON (String/String) | 3 | 6 | Алерты антифрод-модуля |
+| `transcription.raw` | Stream | `callId` | JSON (String/String) | 3 | 6 | Сырая транскрипция диалога (синтетическая, template-based) |
+| `transcription.summary` | Stream | `callId` | JSON (String/String) | 3 | 6 | Суммаризация (keyword-based heuristic, SummaryGenerator.java) |
+| `transcription.enriched` | Stream | `callId` | Confluent JSON (`{"schema":{...},"payload":{...}}`) | 3 | 6 | Обогащённая суммаризация с профилем клиента |
+| `calls.dlq` | Stream | `callId` | JSON (String/String) | 3 | 6 | Dead Letter Queue для битых сообщений |
+| `customers.profile` | Compacted Table | `phone` | JSON (String/String) | 3 | 6 | Профили клиентов (сегмент, риск-уровень) |
+| `transcription.enriched.dlq` | Stream | `callId` | JSON (String/String) | 3 | 3 | DLQ для failed enriched transcription events |
+| `calls.completed.agg` | Stream | `agentId` | JSON (String/String) | 1 | 6 | **ksqlDB output**: агрегация завершённых звонков по agentId |
+| `calls.fraud-alerts.agg` | Stream | `phone` | JSON (String/String) | 1 | 6 | **ksqlDB output**: агрегация фрод-алертов по phone |
 
 ## 4.3. Описание потоков данных
 

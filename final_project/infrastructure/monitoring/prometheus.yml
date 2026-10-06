@@ -30,10 +30,10 @@ scrape_configs:
       - targets:
           - 'postgres-exporter:9187'
 
-  # Infrastructure services
-  - job_name: 'infrastructure'
+  # Kafka Connect (JMX Exporter for connector/task metrics)
+  - job_name: 'kafka-connect'
     static_configs:
-      - targets: ['grafana:3000', 'kafdrop:9000', 'kafka-connect:8083']
+      - targets: ['kafka-connect:5559']
 
   # Microservice targets (Spring Boot Actuator Prometheus endpoints)
   - job_name: 'call-processor'

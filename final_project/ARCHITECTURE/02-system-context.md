@@ -43,9 +43,9 @@
 
 | Система | Тип связи | Описание |
 |---------|-----------|----------|
-| **LLM Service (симуляция)** | In-process | Транскрибация и суммаризация диалогов (симуляция LLM в transcription-analyzer) |
+| **LLM Service (симуляция)** | In-process | Keyword-based summary generation (SummaryGenerator.java) — эвристический анализ по ключевым словам, без LLM |
 | **PostgreSQL** | JDBC (Kafka Connect + direct) | Аналитическое хранилище для отчётности и архивации |
-| **Schema Registry** | HTTP API | Централизованное хранение JSON-схем событий |
+| **Schema Registry** | HTTP API | Централизованное хранение JSON-схем (Confluent JSON format) |
 
 ## 2.5. Связи
 
@@ -58,6 +58,15 @@ call-processor ──[Kafka calls.completed]──▶ transcription-analyzer
 call-processor ──[Kafka calls.metadata]──▶ reporting-nps
 fraud-detector ──[Kafka calls.fraud-alerts]──▶ reporting-nps
 transcription-analyzer ──[Kafka transcription.enriched]──▶ reporting-nps
-transcription-analyzer ──[JDBC]──▶ PostgreSQL
+transcription-analyzer ──[Kafka]──▶ Kafka Connect (JDBC Sink)──▶ PostgreSQL
+transcription-analyzer ──[JDBC]──▶ PostgreSQL (DualWriter)
+load-simulator ──[HTTPS POST /api/load/start]──▶ call-processor
 Monitoring System ──[HTTP /metrics]──▶ все сервисы + Kafka
 ```
+
+## 2.6. Примечания по реализации
+
+- **Spring Security не реализован** — все REST endpoints открыты.
+- **Суммаризация** — keyword-based heuristic (SummaryGenerator.java), а не LLM.
+- **Обогащение** — broadcast pattern через in-memory ConcurrentMap (CustomerProfileManager.java), а не KTable join.
+- **Сериализация** — JSON (StringSerializer/StringDeserializer), не Avro.

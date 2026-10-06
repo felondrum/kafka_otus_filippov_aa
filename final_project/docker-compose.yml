@@ -303,6 +303,7 @@ services:
       - "9090:9090"
     volumes:
       - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/monitoring/alerting-rules.yml:/etc/prometheus/alerting-rules.yml:ro
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -554,6 +555,7 @@ services:
     platform: linux/arm64/v8
     ports:
       - "8086:8083"
+      - "5559:5559"
     environment:
       CONNECT_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
       CONNECT_GROUP_ID: kafka-connect-group
@@ -566,8 +568,12 @@ services:
       CONNECT_OFFSET_STORAGE_TOPIC: _connect_offsets
       CONNECT_STATUS_STORAGE_TOPIC: _connect_statuses
       CONNECT_SCHEMA_REGISTRY_URL: http://schema-registry:8085
+      KAFKA_OPTS: -javaagent:/opt/jmx_exporter/jmx_prometheus_javaagent.jar=5559:/opt/jmx_exporter/config.yml
     networks:
       - call-platform-net
+    volumes:
+      - ./infrastructure/kafka-connect/jmx_prometheus_javaagent.jar:/opt/jmx_exporter/jmx_prometheus_javaagent.jar:ro
+      - ./infrastructure/kafka-connect/jmx-exporter-config.yml:/opt/jmx_exporter/config.yml:ro
     depends_on:
       kafka-1:
         condition: service_healthy
@@ -602,6 +608,16 @@ services:
       KSQL_STREAMS_STATE_DIR: /var/lib/ksqldb/state
       KSQL_SECURITY_PROTOCOL: PLAINTEXT
       KSQL_SASL_ENABLED: "false"
+      # WebSocket endpoint for SELECT/PRINT queries
+      KSQL_STREAMS_RPC_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      # CORS for browser-based WebSocket connections
+      KSQL_HANDLER_CORS_ALLOWED_ORIGINS: "*"
+      KSQL_HANDLER_CORS_ALLOWED_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
+      KSQL_HANDLER_CORS_ALLOWED_HEADERS: "Origin,Content-Type,Accept,Authorization"
+      # WebSocket configuration
+      KSQL_HANDLER_WEBSOCKET_ENABLED: "true"
+      KSQL_HANDLER_WEBSOCKET_PATH: "/query"
+      KSQL_HANDLER_WEBSOCKET_ORIGIN: "*"
     networks:
       - call-platform-net
     depends_on:
