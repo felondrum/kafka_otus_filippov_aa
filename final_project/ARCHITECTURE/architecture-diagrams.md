@@ -91,7 +91,7 @@ flowchart LR
     CP["call-processor :8081\nPOST /api/calls\nvalidate + produce\nacks=all, idempotent"]
 
     TC["calls.completed\nkey=callId, JSON"]
-    TM["calls.metadata\nkey=callId, compacted"]
+    TM["calls.metadata\nkey=callId, compacted\ncall-processor: PENDING\ntranscription-analyzer: TRANSCRIBING→SUMMARIZING→COMPLETED"]
     CFA["calls.fraud-alerts\nkey=phone, JSON"]
     TR["transcription.raw\nkey=callId, JSON"]
     TS["transcription.summary\nkey=callId, JSON"]
@@ -124,6 +124,7 @@ flowchart LR
     TA --> TR
     TA --> TS
     TA --> TE
+    TA --> TM
     CPROF -.->|cache| TA
     CFA --> RN
     TM --> RN
@@ -157,7 +158,7 @@ flowchart LR
 | Topic | Type | Key | Format | Replication | Partitions | Retention | Producer | Consumer(s) |
 |-------|------|-----|--------|-------------|------------|-----------|----------|-------------|
 | `calls.completed` | Stream | `callId` | JSON String/String | 3 | 6 | 7 days | call-processor | fraud-detector, transcription-analyzer |
-| `calls.metadata` | Compacted Table | `callId` | JSON String/String | 3 | 6 | 30 days | call-processor | reporting-nps |
+| `calls.metadata` | Compacted Table | `callId` | JSON String/String | 3 | 6 | 30 days | call-processor (PENDING) + transcription-analyzer (TRANSCRIBING/SUMMARIZING/COMPLETED) | reporting-nps |
 | `calls.fraud-alerts` | Stream | `phone` | JSON String/String | 3 | 6 | default | fraud-detector | reporting-nps |
 | `transcription.raw` | Stream | `callId` | JSON String/String | 3 | 6 | default | transcription-analyzer | summary-processor (internal) |
 | `transcription.summary` | Stream | `callId` | JSON String/String | 3 | 6 | default | transcription-analyzer | enrichment-processor (internal) |

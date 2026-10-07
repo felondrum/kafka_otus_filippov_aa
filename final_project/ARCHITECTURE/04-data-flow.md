@@ -40,6 +40,10 @@ Caller (REST)
 └─────────────────────┘                                   │ (Producer +          │
                                                           │  Streams +           │
                                                           │  Consumer)           │
+                                                          │  writes:             │
+                                                          │  TRANSCRIBING        │
+                                                          │  SUMMARIZING         │
+                                                          │  COMPLETED           │
                                                           └───────┬─────────────┘
                                                                   │
                                               ┌───────────────────┼───────────────────┐
@@ -82,7 +86,7 @@ Caller (REST)
 | Топик | Тип | Ключ | Формат | Репликация | Партиции | Описание |
 |-------|-----|------|--------|------------|----------|----------|
 | `calls.completed` | Stream | `callId` | JSON (String/String) | 3 | 6 | Событие о завершённом звонке |
-| `calls.metadata` | Compacted Table | `callId` | JSON (String/String) | 3 | 6 | Метаинформация звонка (жизненный цикл статусов) |
+| `calls.metadata` | Compacted Table | `callId` | JSON (String/String) | 3 | 6 | Метаинформация звонка (жизненный цикл статусов). **Dual producer:** call-processor (PENDING) + transcription-analyzer (TRANSCRIBING → SUMMARIZING → COMPLETED) |
 | `calls.fraud-alerts` | Stream | `phone` | JSON (String/String) | 3 | 6 | Алерты антифрод-модуля |
 | `transcription.raw` | Stream | `callId` | JSON (String/String) | 3 | 6 | Сырая транскрипция диалога (синтетическая, template-based) |
 | `transcription.summary` | Stream | `callId` | JSON (String/String) | 3 | 6 | Суммаризация (keyword-based heuristic, SummaryGenerator.java) |
@@ -133,7 +137,16 @@ call-processor
     └──[Kafka]──▶ calls.metadata (compacted table)
             │
             │  key=callId (compaction по ключу)
-            │  статусы: PENDING → TRANSCRIBING → SUMMARIZING → COMPLETED
+            │  статус: PENDING (initial)
+            │
+            │  Dual Producer:
+            │  transcription-analyzer (MetadataManager.java)
+            │    ├── initialize() → TRANSCRIBING
+            │    ├── onTranscriptionProduced() → TRANSCRIBING
+            │    ├── onSummaryStarted() → SUMMARIZING
+            │    └── onDualWriteComplete() → COMPLETED
+            │
+            │  Статусы: PENDING → TRANSCRIBING → SUMMARIZING → COMPLETED
             │
             └─▶ reporting-nps (Streams Consumer)
                     │
