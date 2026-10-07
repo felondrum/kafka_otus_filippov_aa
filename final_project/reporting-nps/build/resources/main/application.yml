@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: reporting-nps
+
+  # PostgreSQL / JPA
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:call_platform}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres-secret}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # Kafka Consumer
+  kafka:
+    consumer:
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: reporting-nps
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 100
+    producer:
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+# Server
+server:
+  port: ${SERVER_PORT:8084}
+
+# Caching
+app:
+  cache:
+    metadata-ttl-minutes: 5
+    report-ttl-minutes: 1
+    sentiment-ttl-minutes: 1
+  consumer:
+    processing-timeout-seconds: 30
+    orphan-retry-interval-seconds: 5
+    orphan-retry-max-attempts: 3
+    dlq-topic: dlq.internal
+
+# Management / Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always

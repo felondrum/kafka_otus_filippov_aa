@@ -1,0 +1,17 @@
+# JMX Exporter configuration for Kafka Connect Prometheus metrics
+
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+
+rules:
+  # Catch-all for kafka.connect domain
+  - pattern: 'kafka.connect<type=(.+), (.+)><>(.+)'
+    name: kafka_connect_$1_$3
+    labels:
+      "$2": ""
+    type: GAUGE
+
+  # JMX Exporter internal
+  - pattern: 'io.prometheus.jmx<type=\"JMXExporterMetrics\"><>(value|scrape_duration_seconds)'
+    name: kafka_connect_jmx_exporter_$1
+    type: GAUGE

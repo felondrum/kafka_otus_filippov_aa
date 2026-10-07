@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.callprocessor.dto.ErrorResponseTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-30T12:27:32" hostname="MacBook-Pro-Anton-5.local" time="0.071">
+  <properties/>
+  <testcase name="shouldSerializeErrorResponse()" classname="com.example.callprocessor.dto.ErrorResponseTest" time="0.071"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

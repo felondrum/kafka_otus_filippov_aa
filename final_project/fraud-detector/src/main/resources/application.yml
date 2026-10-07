@@ -1,0 +1,58 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: fraud-detector
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-1:9092,kafka-2:9092,kafka-3:9092}
+
+  streams:
+    application-id: ${APP_ID:fraud-detector}
+    properties:
+      # At-least-once semantics
+      processing.guarantee: at_least_once
+      # State directory for RocksDB (unique per instance to avoid lock conflicts)
+      state.dir: ${STATE_DIR:/tmp/kafka-streams/fraud-detector}
+      # Cache configuration
+      cache.max.bytes.buffering: 10485760
+      # Cleanup interval
+      cleanup.interval.ms: 60000
+      # Poll interval - increase to handle large batches without being fenced
+      # Default is 300000ms (5 min), which is too low for heavy load
+      max.poll.interval.ms: 600000
+      # Limit records per poll to avoid long processing times
+      max.poll.records: 500
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+
+fraud-detector:
+  topics:
+    completed: calls.completed
+    fraud-alerts: calls.fraud-alerts
+  windows:
+    frequent-calls:
+      size-ms: 60000
+      advance-ms: 10000
+      threshold: 5
+    nps-escalation:
+      window-hours: 24
+      threshold: 3
+  filters:
+    min-duration-seconds: 5
+    max-duration-seconds: 300
+
+logging:
+  level:
+    com.example.frauddetector: INFO
+    org.apache.kafka: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{correlationId:-}] %-5level %logger{36} - %msg%n"

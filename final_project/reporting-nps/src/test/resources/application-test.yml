@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/call_platform
+    username: postgres
+    password: postgres-secret
+  kafka:
+    consumer:
+      bootstrap-servers: localhost:9092
+    producer:
+      bootstrap-servers: localhost:9092
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+  main:
+    banner-mode: off
+
+logging:
+  level:
+    root: INFO
+    com.example.reportingnps: DEBUG

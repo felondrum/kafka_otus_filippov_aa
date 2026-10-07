@@ -1,0 +1,675 @@
+networks:
+  call-platform-net:
+    driver: bridge
+
+volumes:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data:
+  postgres-data:
+  grafana-data:
+  fraud-detector-state:
+
+services:
+  # ============================================
+  # Kafka Cluster (3 brokers in KRaft mode)
+  # ============================================
+  kafka-1:
+    image: confluentinc/cp-kafka:7.6.1
+    hostname: kafka-1
+    container_name: kafka-1
+    platform: linux/arm64/v8
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+      - "9099:9099"
+      - "5556:5556"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9094,2@kafka-2:9094,3@kafka-3:9094
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:SASL_PLAINTEXT,MONITORING:PLAINTEXT
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9094,INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093,MONITORING://0.0.0.0:9099
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-1:9092,EXTERNAL://localhost:9092,MONITORING://kafka-1:9099
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
+      CLUSTER_ID: MqKmzjgtTDe2OrohUK8EWQ
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/jaas.conf -javaagent:/opt/jmx_exporter/jmx_prometheus_javaagent.jar=5556:/opt/jmx_exporter/config.yml
+    networks:
+      - call-platform-net
+    volumes:
+      - kafka-1-data:/var/lib/kafka/data
+      - ./infrastructure/kafka/jaas.conf:/etc/kafka/jaas.conf:ro
+      - ./infrastructure/kafka/jmx-exporter-config.yml:/opt/jmx_exporter/config.yml:ro
+      - ./infrastructure/kafka/jmx_prometheus_javaagent.jar:/opt/jmx_exporter/jmx_prometheus_javaagent.jar:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9092; exec 3>&-; exit $?"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.6.1
+    hostname: kafka-2
+    container_name: kafka-2
+    platform: linux/arm64/v8
+    ports:
+      - "9094:9092"
+      - "9095:9093"
+      - "9100:9099"
+      - "5557:5556"
+    environment:
+      KAFKA_NODE_ID: 2
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9094,2@kafka-2:9094,3@kafka-3:9094
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:SASL_PLAINTEXT,MONITORING:PLAINTEXT
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9094,INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093,MONITORING://0.0.0.0:9099
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-2:9092,EXTERNAL://localhost:9094,MONITORING://kafka-2:9099
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
+      CLUSTER_ID: MqKmzjgtTDe2OrohUK8EWQ
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/jaas.conf -javaagent:/opt/jmx_exporter/jmx_prometheus_javaagent.jar=5556:/opt/jmx_exporter/config.yml
+    networks:
+      - call-platform-net
+    volumes:
+      - kafka-2-data:/var/lib/kafka/data
+      - ./infrastructure/kafka/jaas.conf:/etc/kafka/jaas.conf:ro
+      - ./infrastructure/kafka/jmx-exporter-config.yml:/opt/jmx_exporter/config.yml:ro
+      - ./infrastructure/kafka/jmx_prometheus_javaagent.jar:/opt/jmx_exporter/jmx_prometheus_javaagent.jar:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9092; exec 3>&-; exit $?"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  kafka-3:
+    image: confluentinc/cp-kafka:7.6.1
+    hostname: kafka-3
+    container_name: kafka-3
+    platform: linux/arm64/v8
+    ports:
+      - "9096:9092"
+      - "9097:9093"
+      - "9101:9099"
+      - "5558:5556"
+    environment:
+      KAFKA_NODE_ID: 3
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9094,2@kafka-2:9094,3@kafka-3:9094
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:SASL_PLAINTEXT,MONITORING:PLAINTEXT
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9094,INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093,MONITORING://0.0.0.0:9099
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-3:9092,EXTERNAL://localhost:9096,MONITORING://kafka-3:9099
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
+      CLUSTER_ID: MqKmzjgtTDe2OrohUK8EWQ
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/jaas.conf -javaagent:/opt/jmx_exporter/jmx_prometheus_javaagent.jar=5556:/opt/jmx_exporter/config.yml
+    networks:
+      - call-platform-net
+    volumes:
+      - kafka-3-data:/var/lib/kafka/data
+      - ./infrastructure/kafka/jaas.conf:/etc/kafka/jaas.conf:ro
+      - ./infrastructure/kafka/jmx-exporter-config.yml:/opt/jmx_exporter/config.yml:ro
+      - ./infrastructure/kafka/jmx_prometheus_javaagent.jar:/opt/jmx_exporter/jmx_prometheus_javaagent.jar:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9092; exec 3>&-; exit $?"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ============================================
+  # Kafka Exporter (topics, partitions, consumer lag)
+  # ============================================
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: kafka-exporter
+    platform: linux/arm64/v8
+    ports:
+      - "9308:9308"
+    command: ["--kafka.server=kafka-1:9099","--kafka.server=kafka-2:9099","--kafka.server=kafka-3:9099"]
+    networks:
+      - call-platform-net
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    profiles: ["full", "monitoring", "load-test"]
+
+  # ============================================
+  # Call Processor Service
+  # ============================================
+  call-processor:
+    build: ./call-processor
+    container_name: call-processor
+    platform: linux/arm64/v8
+    ports:
+      - "8081:8081"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      SPRING_PROFILES_ACTIVE: docker
+    networks:
+      - call-platform-net
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/api/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    profiles: ["full", "core"]
+
+  # ============================================
+  # Fraud Detector Service
+  # ============================================
+  fraud-detector:
+    build: ./fraud-detector
+    container_name: fraud-detector
+    platform: linux/arm64/v8
+    ports:
+      - "8082:8082"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      APP_ID: fraud-detector
+      STATE_DIR: /tmp/kafka-streams
+      SPRING_PROFILES_ACTIVE: docker
+    networks:
+      - call-platform-net
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    tmpfs:
+      - /tmp/kafka-streams
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8082/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    profiles: ["full", "core"]
+
+
+
+
+
+  # ============================================
+  # PostgreSQL 15
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    platform: linux/arm64/v8
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: call_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres-secret
+    networks:
+      - call-platform-net
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgresql/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    profiles: ["full", "core", "load-test"]
+
+  # ============================================
+  # PostgreSQL Exporter (for Prometheus)
+  # ============================================
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter
+    platform: linux/arm64/v8
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: postgresql://postgres:postgres-secret@postgres:5432/call_platform?sslmode=disable
+    networks:
+      - call-platform-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["full", "monitoring", "load-test"]
+
+  # ============================================
+  # Prometheus
+  # ============================================
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    platform: linux/arm64/v8
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/monitoring/alerting-rules.yml:/etc/prometheus/alerting-rules.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    networks:
+      - call-platform-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://prometheus:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    profiles: ["full", "monitoring", "load-test"]
+
+  # ============================================
+  # Grafana
+  # ============================================
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    platform: linux/arm64/v8
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin-secret
+      GF_SECURITY_SECRET_KEY: secret-key
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_BASIC_ENABLED: "true"
+    networks:
+      - call-platform-net
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infrastructure/monitoring/grafana/provisioning/datasources/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./infrastructure/monitoring/grafana/provisioning/dashboards/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    profiles: ["full", "monitoring", "load-test"]
+
+  # ============================================
+  # Kafdrop (Kafka Admin)
+  # ============================================
+  kafdrop:
+    image: obsidiandynamics/kafdrop:4.0.1
+    container_name: kafdrop
+    ports:
+      - "9000:9000"
+    environment:
+      KAFKA_BROKERCONNECT: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+      KAFKA_PROPERTIES: "security.protocol=PLAINTEXT"
+      JVM_OPTS: "-Xms32M -Xmx64M"
+    networks:
+      - call-platform-net
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    profiles: ["full", "monitoring", "load-test"]
+
+  # ============================================
+  # Transcription Analyzer Service
+  # ============================================
+  transcription-analyzer:
+    build: ./transcription-analyzer
+    container_name: transcription-analyzer
+    platform: linux/arm64/v8
+    ports:
+      - "8083:8083"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: call_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres-secret
+    networks:
+      - call-platform-net
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8083/api/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    profiles: ["full", "core"]
+
+
+
+  # ============================================
+  # Kafka Topic Initializer
+  # ============================================
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka-init
+    platform: linux/arm64/v8
+    volumes:
+      - ./infrastructure/kafka/init-topics.sh:/tmp/init-topics.sh:ro
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    command: ["bash", "/tmp/init-topics.sh"]
+    networks:
+      - call-platform-net
+    profiles: ["full", "core", "load-test"]
+
+  # ============================================
+  # Customer Data Bootstrap
+  # ============================================
+  kafka-bootstrap:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka-bootstrap
+    platform: linux/arm64/v8
+    volumes:
+      - ./infrastructure/kafka/bootstrap-customers.sh:/tmp/bootstrap-customers.sh:ro
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    command: ["bash", "/tmp/bootstrap-customers.sh"]
+    networks:
+      - call-platform-net
+    profiles: ["full", "core", "load-test"]
+
+  # ============================================
+  # Kafka Connect JDBC Sink Connector
+  # ============================================
+  kafka-connect-init:
+    image: confluentinc/cp-kafka-connect:7.6.1
+    container_name: kafka-connect-init
+    platform: linux/arm64/v8
+    volumes:
+      - ./infrastructure/kafka/kafka-connect-init.sh:/tmp/kafka-connect-init.sh:ro
+    environment:
+      KAFKA_CONNECT_URL: http://kafka-connect:8083
+      SCHEMA_REGISTRY_URL: http://schema-registry:8085
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
+      kafka-connect:
+        condition: service_healthy
+    command: ["bash", "/tmp/kafka-connect-init.sh"]
+    networks:
+      - call-platform-net
+    profiles: ["full", "core"]
+
+  # ============================================
+  # Reporting NPS Service
+  # ============================================
+  reporting-nps:
+    build: ./reporting-nps
+    container_name: reporting-nps
+    platform: linux/arm64/v8
+    ports:
+      - "8084:8084"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: call_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres-secret
+      SERVER_PORT: 8084
+    networks:
+      - call-platform-net
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8084/api/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    profiles: ["full", "core"]
+
+  # ============================================
+  # Schema Registry (JSON schemas)
+  # ============================================
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.1
+    container_name: schema-registry
+    platform: linux/arm64/v8
+    ports:
+      - "8085:8085"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8085
+    networks:
+      - call-platform-net
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    profiles: ["full", "core"]
+
+  # ============================================
+  # Kafka Connect (JSON converters)
+  # ============================================
+  kafka-connect:
+    build: ./infrastructure/kafka-connect
+    container_name: kafka-connect
+    platform: linux/arm64/v8
+    ports:
+      - "8086:8083"
+      - "5559:5559"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      CONNECT_GROUP_ID: kafka-connect-group
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect_configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect_offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _connect_statuses
+      CONNECT_SCHEMA_REGISTRY_URL: http://schema-registry:8085
+      KAFKA_OPTS: -javaagent:/opt/jmx_exporter/jmx_prometheus_javaagent.jar=5559:/opt/jmx_exporter/config.yml
+    networks:
+      - call-platform-net
+    volumes:
+      - ./infrastructure/kafka-connect/jmx_prometheus_javaagent.jar:/opt/jmx_exporter/jmx_prometheus_javaagent.jar:ro
+      - ./infrastructure/kafka-connect/jmx-exporter-config.yml:/opt/jmx_exporter/config.yml:ro
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8083/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    profiles: ["full", "core"]
+
+  # ============================================
+  # ksqlDB Server (JSON streams)
+  # ============================================
+  ksqldb-server:
+    image: confluentinc/cp-ksqldb-server:7.6.1
+    container_name: ksqldb-server
+    platform: linux/arm64/v8
+    ports:
+      - "8088:8088"
+    environment:
+      KSQL_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KSQL_LISTENERS: http://0.0.0.0:8088
+      KSQL_SCHEMA_REGISTRY_URL: http://schema-registry:8085
+      KSQL_SERVICE_ID: ksqldb-service
+      KSQL_STREAMS_STATE_DIR: /var/lib/ksqldb/state
+      KSQL_SECURITY_PROTOCOL: PLAINTEXT
+      KSQL_SASL_ENABLED: "false"
+      # WebSocket endpoint for SELECT/PRINT queries
+      KSQL_STREAMS_RPC_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      # CORS for browser-based WebSocket connections
+      KSQL_HANDLER_CORS_ALLOWED_ORIGINS: "*"
+      KSQL_HANDLER_CORS_ALLOWED_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
+      KSQL_HANDLER_CORS_ALLOWED_HEADERS: "Origin,Content-Type,Accept,Authorization"
+      # WebSocket configuration
+      KSQL_HANDLER_WEBSOCKET_ENABLED: "true"
+      KSQL_HANDLER_WEBSOCKET_PATH: "/query"
+      KSQL_HANDLER_WEBSOCKET_ORIGIN: "*"
+    networks:
+      - call-platform-net
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
+    volumes:
+      - fraud-detector-state:/var/lib/ksqldb/state
+    profiles: ["full", "core"]
+
+  # ============================================
+  # ksqlDB Initializer (creates streams & tables)
+  # ============================================
+  ksqldb-init:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: ksqldb-init
+    platform: linux/arm64/v8
+    volumes:
+      - ./infrastructure/kafka/ksqldb-init.sh:/tmp/ksqldb-init.sh:ro
+    environment:
+      KSQLDB_URL: http://ksqldb-server:8088
+      KSQLDB_WAIT_RETRIES: "30"
+      KSQLDB_WAIT_INTERVAL: "5"
+    depends_on:
+      ksqldb-server:
+        condition: service_started
+    command: ["bash", "/tmp/ksqldb-init.sh"]
+    networks:
+      - call-platform-net
+    profiles: ["full", "core"]
+
+  # ============================================
+  # Load Simulator Service (synthetic load generator)
+  # ============================================
+  load-simulator:
+    build: ./load-simulator
+    container_name: load-simulator
+    platform: linux/arm64/v8
+    ports:
+      - "8087:8087"
+    environment:
+      CALL_PROCESSOR_URL: http://call-processor:8081
+      SERVER_PORT: 8087
+    networks:
+      - call-platform-net
+    depends_on:
+      call-processor:
+        condition: service_healthy
+    profiles: ["full", "load-test"]
+

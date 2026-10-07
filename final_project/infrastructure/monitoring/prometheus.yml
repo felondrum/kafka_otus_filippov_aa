@@ -1,0 +1,57 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - 'alerting-rules.yml'
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['prometheus:9090']
+
+  # Kafka brokers with JMX Exporter (port 5556)
+  - job_name: 'kafka'
+    static_configs:
+      - targets:
+          - 'kafka-1:5556'
+          - 'kafka-2:5556'
+          - 'kafka-3:5556'
+
+  # Kafka Exporter (topics, partitions, consumer lag)
+  - job_name: 'kafka-exporter'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+
+  # PostgreSQL exporters
+  - job_name: 'postgresql'
+    static_configs:
+      - targets:
+          - 'postgres-exporter:9187'
+
+  # Kafka Connect (JMX Exporter for connector/task metrics)
+  - job_name: 'kafka-connect'
+    static_configs:
+      - targets: ['kafka-connect:5559']
+
+  # Microservice targets (Spring Boot Actuator Prometheus endpoints)
+  - job_name: 'call-processor'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['call-processor:8081']
+
+  - job_name: 'fraud-detector'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['fraud-detector:8082']
+
+  - job_name: 'transcription-analyzer'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['transcription-analyzer:8083']
+
+  - job_name: 'reporting-nps'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['reporting-nps:8084']
